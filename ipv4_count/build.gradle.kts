@@ -9,12 +9,17 @@ plugins {
     application
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_16
+}
+
 repositories {
     mavenCentral()
 }
 
 dependencies {
     testImplementation("org.junit.jupiter", "junit-jupiter", "5.8.1")
+    testImplementation("org.mockito", "mockito-core", "3.+")
 }
 
 tasks.named<Test>("test") {
