@@ -2,7 +2,6 @@ package dev.aspid812.ipv4_count.impl
 
 import org.junit.jupiter.api.*
 import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.Mockito
 
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -13,8 +12,7 @@ import org.mockito.Mockito.verifyNoMoreInteractions
 import java.io.StringReader
 
 import dev.aspid812.ipv4_count.impl.IPv4Parser.ParseResult
-import org.junit.jupiter.params.provider.Arguments
-import org.junit.jupiter.params.provider.MethodSource
+import org.junit.jupiter.params.provider.*
 
 
 class IPv4ParserTest {
@@ -24,21 +22,13 @@ class IPv4ParserTest {
 			addressString.splitToSequence('.')
 				.map(Integer::parseInt)
 				.fold(0) { address, octet -> address.shl(8) + octet }
-
-		@JvmStatic
-		fun invalidAddresses() = listOf(
-			"Too few octets"           to "1.2.3",
-			"Too many octets"          to "1.2.3.4.5",
-			"Skipped octet"            to "1.2..4",
-			"Octet starting with zero" to "1.2.03.4",
-			"Octet is too large"       to "1.2.256.4",
-		).map { Named.of(it.first, it.second) }
 	}
 
 	@Test
 	fun `Test utility sanity check`() {
 		assertEquals(0x7F000001,         ipStringToInt("127.0.0.1"))
-		assertEquals(0xC0A8585B.toInt(), ipStringToInt("192.168.88.91"))
+		assertEquals(0xAC10FE01.toInt(), ipStringToInt("172.16.254.1"))
+		assertEquals(0x08666768,         ipStringToInt("08.102.103.104"))
 	}
 
 
@@ -51,33 +41,63 @@ class IPv4ParserTest {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings=["127.0.0.1", "192.168.88.91"])
-	fun `Correct cases`(addressString: String) {
+	@ValueSource(strings=["1.2.3.4", "255.255.255.255", "0.0.0.0"])
+	fun `Valid IPv4 addresses are parsed correctly`(addressString: String) {
 		subject = IPv4Parser(StringReader(addressString))
 
 		val result = subject.parseNextLine(sink)
 
 		val expectedAddress = ipStringToInt(addressString)
-		assertEquals(ParseResult.SUCCESS, result)
+		assertEquals(ParseResult.ADDRESS, result)
 		verify(sink).accept(expectedAddress)
 		verifyNoMoreInteractions(sink)
 	}
 
 	@ParameterizedTest
-	@MethodSource("invalidAddresses")
-	fun `Invalid cases`(addressString: String) {
+	@ValueSource(strings=["00.01.02.03", "000.001.002.003", "0000.0001.0002.0003"])
+	fun `Octet may start with one or more zeros`(addressString: String) {
 		subject = IPv4Parser(StringReader(addressString))
 
 		val result = subject.parseNextLine(sink)
 
-		assertEquals(ParseResult.ERROR, result)
+		val expectedAddress = ipStringToInt(addressString)
+		assertEquals(ParseResult.ADDRESS, result)
+		verify(sink).accept(expectedAddress)
+		verifyNoMoreInteractions(sink)
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings=[".2.3.4", ".1.2.3.4", "1..3.4", "1.2.3.", "1.2.3.4."])
+	fun `Empty octets are not allowed`(addressString: String) {
+		subject = IPv4Parser(StringReader(addressString))
+
+		val result = subject.parseNextLine(sink)
+
+		assertEquals(ParseResult.MISTAKE, result)
 		verifyNoInteractions(sink)
 	}
 
+	// „Три есть цифирь, до коей счесть потребно, и сочтенья твои суть три. До четырёх счесть не моги,
+	// паче же до двух, опричь токмо коли два предшествует трём“.
+	@ParameterizedTest
+	@ValueSource(strings=["1.2.3", "1.2.3.4.5"])
+	fun `IPv4 address must consist of exactly four octets`(addressString: String) {
+		subject = IPv4Parser(StringReader(addressString))
 
-	@Test
-	fun `Empty octets are not allowed`() {
-		subject = IPv4Parser(StringReader("1...4"))
-		subject.parseNextLine(sink)
+		val result = subject.parseNextLine(sink)
+
+		assertEquals(ParseResult.MISTAKE, result)
+		verifyNoInteractions(sink)
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings=["1.2.3.256"])
+	fun `Octet value must be between 0 and 255`(addressString: String) {
+		subject = IPv4Parser(StringReader(addressString))
+
+		val result = subject.parseNextLine(sink)
+
+		assertEquals(ParseResult.MISTAKE, result)
+		verifyNoInteractions(sink)
 	}
 }

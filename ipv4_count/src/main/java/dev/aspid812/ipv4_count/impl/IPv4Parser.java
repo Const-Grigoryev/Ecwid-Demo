@@ -9,22 +9,21 @@ public class IPv4Parser {
     private static final int OCTET_MASK = ~(-1 << BITS_PER_OCTET);
 
     public enum ParseResult {
-        SUCCESS,
-        ERROR,
-        END_OF_FILE
+        ADDRESS,
+        MISTAKE,
+        NOTHING
     }
 
     private enum State {
-        INIT,
-        OCTET_START,
         OCTET,
-        OCTET_END,
+        OCTET_DIGIT,
         ERROR,
         FAST_FORWARD,
         STOP
     }
 
     final Reader reader;
+
     private String lastError;
 
     public IPv4Parser(Reader reader) {
@@ -37,43 +36,37 @@ public class IPv4Parser {
 
     @SuppressWarnings("fallthrough")
     public ParseResult parseNextLine(IPv4Builder sink) throws IOException {
-        int octetsRead = 0;
-        String error = null;
-        Integer octet = null, address = null;
-        var state = State.INIT;
+        var address = 0x00;
+        var error = (String) null;
+        var octets = 0;
+        var state = State.OCTET_DIGIT;
         while (state != State.STOP) {
-            int charCode = reader.read();
-            char ch = charCode == -1 ? '\n' : (char) charCode;
+            var charCode = reader.read();
+            var ch = charCode == -1 ? '\n' : (char) charCode;
             state = switch (state) {
-                case INIT:
-                    address = 0;
-                    if (ch == '\n')
-                        yield State.STOP;
-
-                case OCTET_START:
-                    octet = 0;
-                    if (ch == '0')
-                        yield State.OCTET_END;
-
                 case OCTET:
-                    if ('0' <= ch && ch <= '9') {
-                        octet = octet * 10 + (ch - '0');
-                        if ((octet & ~OCTET_MASK) == 0)
-                            yield State.OCTET;
+                    if (ch == '.' && ++octets < OCTETS_PER_ADDRESS) {
+                        address <<= BITS_PER_OCTET;
+                        yield State.OCTET_DIGIT;
+                    }
+                    if (ch == '\n' && ++octets == OCTETS_PER_ADDRESS) {
+                        yield State.STOP;
                     }
 
-                case OCTET_END:
-                    if (ch == '.' || ch == '\n') {
-                        address = (address << BITS_PER_OCTET) | octet;
-                        octetsRead++;
-                        if (ch == '.' && octetsRead < OCTETS_PER_ADDRESS)
-                            yield State.OCTET_START;
-                        if (ch == '\n' && octetsRead == OCTETS_PER_ADDRESS)
-                            yield State.STOP;
+                case OCTET_DIGIT:
+                    if ('0' <= ch && ch <= '9') {
+                        var octet = address & OCTET_MASK;
+                        address ^= (octet ^= octet * 10 + (ch - '0'));
+                        if ((octet & ~OCTET_MASK) != 0) {
+                            error = "Invalid octet value";
+                            yield State.FAST_FORWARD;
+                        }
+                        yield State.OCTET;
                     }
 
                 case ERROR:     // Dummy label, may be reached only by falling-through
-                    error = "Shit happens";
+                    error = "Unexpected character";
+                    yield State.FAST_FORWARD;
 
                 case FAST_FORWARD:
                     if (ch == '\n')
@@ -87,14 +80,10 @@ public class IPv4Parser {
 
         lastError = error;
         if (error != null) {
-            return ParseResult.ERROR;
-        }
-
-        if (octetsRead == 0) {
-            return ParseResult.END_OF_FILE;
+            return ParseResult.MISTAKE;
         }
 
         sink.accept(address);
-        return ParseResult.SUCCESS;
+        return ParseResult.ADDRESS;
     }
 }

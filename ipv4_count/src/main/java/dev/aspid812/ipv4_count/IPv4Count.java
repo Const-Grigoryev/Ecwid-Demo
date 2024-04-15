@@ -33,10 +33,10 @@ public class IPv4Count {
                 addressSet.witness(Integer.toUnsignedLong(address));
             });
             done = switch (status) {
-                case ERROR:
+                case MISTAKE:
                     yield errorHandler.onError(parser.getLastError());
                 default:
-                    yield status == ParseResult.END_OF_FILE;
+                    yield status == ParseResult.NOTHING;
             };
         }
 
