@@ -13,6 +13,8 @@ import java.io.StringReader
 
 import dev.aspid812.ipv4_count.impl.IPv4Parser.ParseResult
 import org.junit.jupiter.params.provider.*
+import java.text.MessageFormat
+import java.util.regex.Pattern
 
 
 class IPv4ParserTest {
@@ -99,5 +101,32 @@ class IPv4ParserTest {
 
 		assertEquals(ParseResult.MISTAKE, result)
 		verifyNoInteractions(sink)
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings=["", "\n1.2.3.4"])
+	fun `Parser should identify blank lines as well`(addressString: String) {
+		subject = IPv4Parser(StringReader(addressString))
+
+		val result = subject.parseNextLine(sink)
+
+		assertEquals(ParseResult.NOTHING, result)
+		verifyNoInteractions(sink)
+	}
+
+	@Test
+	fun `Parser handles multiline input`() {
+		val addressLines = arrayOf("1.2.3.4", "255.255.255.255", "0.0.0.0")
+		subject = IPv4Parser(StringReader(addressLines.joinToString("\n")))
+
+		for (lineNo in addressLines.indices) {
+			subject.parseNextLine(sink)
+		}
+
+		for (addressString in addressLines) {
+			val expectedAddress = ipStringToInt(addressString)
+			verify(sink).accept(expectedAddress)
+		}
+		verifyNoMoreInteractions(sink)
 	}
 }

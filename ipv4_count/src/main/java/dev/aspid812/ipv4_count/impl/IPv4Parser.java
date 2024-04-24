@@ -14,6 +14,7 @@ public class IPv4Parser {
         NOTHING
     }
 
+    //TODO: Refactor state machine, choose more sensible state names
     private enum State {
         OCTET,
         OCTET_DIGIT,
@@ -63,6 +64,9 @@ public class IPv4Parser {
                         }
                         yield State.OCTET;
                     }
+                    if (ch == '\n' && octets == 0) {
+                        yield State.STOP;
+                    }
 
                 case ERROR:     // Dummy label, may be reached only by falling-through
                     error = "Unexpected character";
@@ -81,6 +85,10 @@ public class IPv4Parser {
         lastError = error;
         if (error != null) {
             return ParseResult.MISTAKE;
+        }
+
+        if (octets == 0) {
+            return ParseResult.NOTHING;
         }
 
         sink.accept(address);
