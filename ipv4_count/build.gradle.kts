@@ -6,11 +6,16 @@ import org.gradle.api.JavaVersion
 
 plugins {
     kotlin("jvm") version "1.6.21"
+    id("me.champeau.jmh") version "0.7.2"
     application
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_16
+}
+
+application {
+    mainClass.set("dev.aspid812.ipv4_count.IPv4CountApp")
 }
 
 repositories {
@@ -22,7 +27,7 @@ dependencies {
     testImplementation("org.mockito", "mockito-core", "3.+")
 }
 
-tasks.named<Test>("test") {
-    // Use JUnit Platform for unit tests.
+tasks.test {
+    maxHeapSize = "1024M"
     useJUnitPlatform()
 }

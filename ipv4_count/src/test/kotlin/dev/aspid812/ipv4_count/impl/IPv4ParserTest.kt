@@ -4,17 +4,16 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.mockito.Mockito
 
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.params.provider.*
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.verifyNoMoreInteractions
 
+import java.io.Reader
 import java.io.StringReader
 
 import dev.aspid812.ipv4_count.impl.IPv4Parser.ParseResult
-import org.junit.jupiter.params.provider.*
-import java.text.MessageFormat
-import java.util.regex.Pattern
 
 
 class IPv4ParserTest {
@@ -42,91 +41,110 @@ class IPv4ParserTest {
 		sink = Mockito.mock(IPv4Builder::class.java)
 	}
 
-	@ParameterizedTest
-	@ValueSource(strings=["1.2.3.4", "255.255.255.255", "0.0.0.0"])
-	fun `Valid IPv4 addresses are parsed correctly`(addressString: String) {
-		subject = IPv4Parser(StringReader(addressString))
+	@Nested
+	@DisplayName("IPv4 syntax support")
+	inner class IPv4Syntax {
 
-		val result = subject.parseNextLine(sink)
+		// „Три есть цифирь, до коей счесть потребно, и сочтенья твои суть три. До четырёх счесть не моги,
+		// паче же до двух, опричь токмо коли два предшествует трём“.
+		@ParameterizedTest
+		@ValueSource(strings = ["", "1.2.3", "1.2.3.4.5"])
+		fun `IPv4 address consist of exactly four octets`(addressString: String) {
+			subject = IPv4Parser(StringReader(addressString))
 
-		val expectedAddress = ipStringToInt(addressString)
-		assertEquals(ParseResult.ADDRESS, result)
-		verify(sink).accept(expectedAddress)
-		verifyNoMoreInteractions(sink)
-	}
+			val result = subject.parseNextLine(sink)
 
-	@ParameterizedTest
-	@ValueSource(strings=["00.01.02.03", "000.001.002.003", "0000.0001.0002.0003"])
-	fun `Octet may start with one or more zeros`(addressString: String) {
-		subject = IPv4Parser(StringReader(addressString))
-
-		val result = subject.parseNextLine(sink)
-
-		val expectedAddress = ipStringToInt(addressString)
-		assertEquals(ParseResult.ADDRESS, result)
-		verify(sink).accept(expectedAddress)
-		verifyNoMoreInteractions(sink)
-	}
-
-	@ParameterizedTest
-	@ValueSource(strings=[".2.3.4", ".1.2.3.4", "1..3.4", "1.2.3.", "1.2.3.4."])
-	fun `Empty octets are not allowed`(addressString: String) {
-		subject = IPv4Parser(StringReader(addressString))
-
-		val result = subject.parseNextLine(sink)
-
-		assertEquals(ParseResult.MISTAKE, result)
-		verifyNoInteractions(sink)
-	}
-
-	// „Три есть цифирь, до коей счесть потребно, и сочтенья твои суть три. До четырёх счесть не моги,
-	// паче же до двух, опричь токмо коли два предшествует трём“.
-	@ParameterizedTest
-	@ValueSource(strings=["1.2.3", "1.2.3.4.5"])
-	fun `IPv4 address must consist of exactly four octets`(addressString: String) {
-		subject = IPv4Parser(StringReader(addressString))
-
-		val result = subject.parseNextLine(sink)
-
-		assertEquals(ParseResult.MISTAKE, result)
-		verifyNoInteractions(sink)
-	}
-
-	@ParameterizedTest
-	@ValueSource(strings=["1.2.3.256"])
-	fun `Octet value must be between 0 and 255`(addressString: String) {
-		subject = IPv4Parser(StringReader(addressString))
-
-		val result = subject.parseNextLine(sink)
-
-		assertEquals(ParseResult.MISTAKE, result)
-		verifyNoInteractions(sink)
-	}
-
-	@ParameterizedTest
-	@ValueSource(strings=["", "\n1.2.3.4"])
-	fun `Parser should identify blank lines as well`(addressString: String) {
-		subject = IPv4Parser(StringReader(addressString))
-
-		val result = subject.parseNextLine(sink)
-
-		assertEquals(ParseResult.NOTHING, result)
-		verifyNoInteractions(sink)
-	}
-
-	@Test
-	fun `Parser handles multiline input`() {
-		val addressLines = arrayOf("1.2.3.4", "255.255.255.255", "0.0.0.0")
-		subject = IPv4Parser(StringReader(addressLines.joinToString("\n")))
-
-		for (lineNo in addressLines.indices) {
-			subject.parseNextLine(sink)
+			assertNotEquals(ParseResult.ADDRESS, result)
+			verifyNoInteractions(sink)
 		}
 
-		for (addressString in addressLines) {
+		@ParameterizedTest
+		@ValueSource(strings = ["256.2.3.4", "1.256.3.4", "1.2.3.256"])
+		fun `Octet is a non-negative integer not greater then 255`(addressString: String) {
+			subject = IPv4Parser(StringReader(addressString))
+
+			val result = subject.parseNextLine(sink)
+
+			assertNotEquals(ParseResult.ADDRESS, result)
+			verifyNoInteractions(sink)
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = ["00.01.02.03", "000.001.002.003", "0000.0001.0002.0003"])
+		fun `Octet may start with one or more zeros`(addressString: String) {
+			subject = IPv4Parser(StringReader(addressString))
+
+			val result = subject.parseNextLine(sink)
+
 			val expectedAddress = ipStringToInt(addressString)
+			assertEquals(ParseResult.ADDRESS, result)
 			verify(sink).accept(expectedAddress)
+			verifyNoMoreInteractions(sink)
 		}
-		verifyNoMoreInteractions(sink)
+
+		@ParameterizedTest
+		@ValueSource(strings = [".2.3.4", ".1.2.3.4", "1..3.4", "1.2.3.", "1.2.3.4."])
+		fun `Empty octets are not allowed`(addressString: String) {
+			subject = IPv4Parser(StringReader(addressString))
+
+			val result = subject.parseNextLine(sink)
+
+			assertNotEquals(ParseResult.ADDRESS, result)
+			verifyNoInteractions(sink)
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = ["3.14.159.26", "0.0.0.0", "1.2.3.4", "255.255.255.255"])
+		fun `Examples of a well-formed IPv4 address`(addressString: String) {
+			subject = IPv4Parser(StringReader(addressString))
+
+			val result = subject.parseNextLine(sink)
+
+			val expectedAddress = ipStringToInt(addressString)
+			assertEquals(ParseResult.ADDRESS, result)
+			verify(sink).accept(expectedAddress)
+			verifyNoMoreInteractions(sink)
+		}
+	}
+
+	@Nested
+	@DisplayName("Multi-line input treatment")
+	inner class MultiLineInput {
+
+		@ParameterizedTest
+		@ValueSource(strings = ["", "\n", "\n1.2.3.4", "\nhere be dragons"])
+		fun `Parser identifies and accepts blank lines`(inputString: String) {
+			subject = IPv4Parser(StringReader(inputString))
+
+			val result = subject.parseNextLine(sink)
+
+			assertEquals(ParseResult.NOTHING, result)
+			verifyNoInteractions(sink)
+		}
+
+		@Test
+		fun `Reading beyond end-of-file yields a specific token`() {
+			val reads = IntRange(1, 5).toList()
+			subject = IPv4Parser(Reader.nullReader())
+
+			val actualResult = reads.map { subject.parseNextLine(sink) }
+
+			val expectedResult = reads.map { ParseResult.NOTHING }
+			assertEquals(expectedResult, actualResult)
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = ["", "1", "1.2.", "1.2.3.4", "1.2.3.4.", "1.2.3.4.5", "999.0.0.0", "some other stuff"])
+		fun `parseNextLine() consumes a single line regardless of its content`(firstLine: String) {
+			val secondLine = "3.14.159.26"
+			subject = IPv4Parser(StringReader("$firstLine\n$secondLine"))
+
+			val result = arrayOf(
+				subject.parseNextLine(sink),
+				subject.parseNextLine(sink)
+			)
+
+			assertEquals(ParseResult.ADDRESS, result[1])
+		}
 	}
 }
