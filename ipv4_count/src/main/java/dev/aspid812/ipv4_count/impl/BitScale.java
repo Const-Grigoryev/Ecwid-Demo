@@ -12,9 +12,8 @@ public class BitScale {
 	private final long[] words;
 
 	public BitScale(long size) {
-		if (size < 0 || size > SIZE_LIMIT) {
+		if (size < 0 || size > SIZE_LIMIT)
 			throw new IllegalArgumentException("size = " + size);
-		}
 
 		this.size = size;
 		this.words = new long[wordIndex(size - 1) + 1];
@@ -25,16 +24,15 @@ public class BitScale {
 	}
 
 	public void witness(long bit) {
-		if (bit < 0 || bit >= size) {
+		if (bit < 0 || bit >= size)
 			throw new IndexOutOfBoundsException(bit);
-		}
 
 		words[wordIndex(bit)] |= 1L << bit;
 	}
 
 	public long count() {
 		return Arrays.stream(words)
-				.map(Long::bitCount)
-				.sum();
+			.map(Long::bitCount)
+			.sum();
 	}
 }

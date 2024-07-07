@@ -3,25 +3,17 @@ package dev.aspid812.ipv4_count.impl;
 import java.io.IOException;
 import java.io.Reader;
 
-public class IPv4Parser {
+import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTETS_PER_ADDRESS;
+import static dev.aspid812.ipv4_count.impl.IPv4Address.BITS_PER_OCTET;
+import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTET_MASK;
 
-	private static final int BITS_PER_OCTET = 8;
-	private static final int OCTETS_PER_ADDRESS = 4;
-	private static final int OCTET_MASK = ~(-1 << BITS_PER_OCTET);
 
-	public enum ParseResult {
+public final class IPv4Parser {
+
+	public enum LineToken {
 		ADDRESS,
 		MISTAKE,
 		NOTHING
-	}
-
-	//TODO: Refactor state machine, choose more sensible state names
-	private enum State {
-		OCTET,
-		OCTET_DIGIT,
-		ERROR,
-		FAST_FORWARD,
-		STOP
 	}
 
 	final Reader reader;
@@ -36,60 +28,90 @@ public class IPv4Parser {
 		return lastError;
 	}
 
-	@SuppressWarnings("fallthrough")
-	public ParseResult parseNextLine(IPv4Builder sink) throws IOException {
+	public LineToken parseNextLine(IPv4Builder sink) throws IOException {
+		// Automaton's state summarizes a consumed portion (`p`) of the input string.
+		enum State {
+			OPEN_OCTET,     // `p` contains some octets, and the last one isn't complete yet; thus, `p` ends with a digit;
+			CLOSED_OCTET,   // `p` is empty, or contains some octets, each of which is _closed_ by a following dot;
+			NONSENSE        // `p` may not be a prefix of any recognizable substance (valid IP address).
+		}
+
+		// Output registers: construction site of a parsing product.
 		var address = 0x00;
 		var error = (String) null;
+
+		// Loop over characters of the input string (single line), changing `state` after each. The variable named
+		// `octets` counts closed octets and, strictly speaking, this number is a part of automaton's state too.
 		var octets = 0;
-		var state = State.OCTET_DIGIT;
-		while (state != State.STOP) {
-			var charCode = reader.read();
-			var ch = charCode == -1 ? '\n' : (char) charCode;
+		var state = State.CLOSED_OCTET;
+		while (true) {
+			// **Assertion 1 (loop invariant):** regardless of the state, `0 <= octets && octets < OCTETS_PER_ADDRESS`
+			// both before and after the loop's body.
+
+			// **Assertion 2:** one and only one character is read at each iteration. This is correct because we
+			// do not receive a character from the reader anywhere else.
+			var ch = reader.read();
+
+			// **Assertion 3:** the loop breaks when and only when it encounters an EOL or EOF character. Therefore,
+			// a single parser invocation consumes exactly one line from the input.
+			if (ch == -1 || ch == '\n')
+				break;
+
+			// **Assertion 4:** by now, we have already guaranteed that `ch` is a regular character, which belongs
+			// to the automaton's alphabet, not a special character like EOL or EOF.
+
+			// Compute transition function: given a character of the alphabet, map current state to a new one. After
+			// that, the character is considered consumed and adopted. Please note that the order of case labels
+			// is important here, since we essentially rely on falling-through.
 			state = switch (state) {
-				case OCTET:
+				case OPEN_OCTET:
 					if (ch == '.' && ++octets < OCTETS_PER_ADDRESS) {
 						address <<= BITS_PER_OCTET;
-						yield State.OCTET_DIGIT;
-					}
-					if (ch == '\n' && ++octets == OCTETS_PER_ADDRESS) {
-						yield State.STOP;
+						yield State.CLOSED_OCTET;
 					}
 
-				case OCTET_DIGIT:
+				case CLOSED_OCTET:
 					if ('0' <= ch && ch <= '9') {
 						var octet = address & OCTET_MASK;
 						address ^= (octet ^= octet * 10 + (ch - '0'));
 						if ((octet & ~OCTET_MASK) != 0) {
 							error = "Invalid octet value";
-							yield State.FAST_FORWARD;
+							yield State.NONSENSE;
 						}
-						yield State.OCTET;
-					}
-					if (ch == '\n' && octets == 0) {
-						yield State.STOP;
+						yield State.OPEN_OCTET;
 					}
 
-				case ERROR:     // Dummy label, may be reached only by falling-through
+				default:
+					// If we've fallen-through down to here, it means the automaton was failed to recognize the input.
 					error = "Unexpected character";
 
-				case FAST_FORWARD:
-					if (ch == '\n')
-						yield State.STOP;
-					yield State.FAST_FORWARD;
-
-				case STOP:      // Actually unreachable, just make the compiler happy
-					throw new RuntimeException();
+				case NONSENSE:
+					yield State.NONSENSE;
 			};
 		}
 
+		// Compute classifying function: is the state our automaton has reached accepting or non-accepting?
+		// It can be thought of as a peculiar special case of a transition function for the EOL character. Thus,
+		// fall-through matters here as before. Watch you step!
+		var token = switch (state) {
+			case OPEN_OCTET:
+				if (++octets == OCTETS_PER_ADDRESS)
+					yield LineToken.ADDRESS;
+
+			case CLOSED_OCTET:
+				if (octets == 0)
+					yield LineToken.NOTHING;
+
+			default:
+				error = "Malformed address (too short)";
+				yield LineToken.MISTAKE;
+		};
+
+		// Finally, depending on a classification result, export a parsing product to an external holder.
 		lastError = error;
-		if (error != null)
-			return ParseResult.MISTAKE;
-
-		if (octets == 0)
-			return ParseResult.NOTHING;
-
-		sink.accept(address);
-		return ParseResult.ADDRESS;
+		if (token == LineToken.ADDRESS) {
+			sink.accept(address);
+		}
+		return token;
 	}
 }

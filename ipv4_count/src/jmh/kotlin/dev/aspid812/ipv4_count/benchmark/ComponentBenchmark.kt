@@ -19,8 +19,9 @@ import dev.aspid812.ipv4_count.benchmark.util.ByteBufferInputStream
 import dev.aspid812.ipv4_count.benchmark.util.CharBufferReader
 import dev.aspid812.ipv4_count.benchmark.util.RewindingBufferHolder
 import dev.aspid812.ipv4_count.impl.BitScale
+import dev.aspid812.ipv4_count.impl.IPv4Address
 import dev.aspid812.ipv4_count.impl.IPv4Parser
-import dev.aspid812.ipv4_count.impl.IPv4Parser.ParseResult
+import dev.aspid812.ipv4_count.impl.IPv4Parser.LineToken
 
 
 @State(Scope.Thread)
@@ -55,7 +56,7 @@ abstract class ComponentBenchmarkBase {
 
 	val datasetAsAddressList: List<Int> by lazy {
 		datasetAsLineList.asSequence()
-			.map { runCatching { this.ipStringToInt(it) } }
+			.map { runCatching { IPv4Address.parseInt(it) } }
 			.mapNotNull(Result<Int>::getOrNull)
 			.toList()
 	}
@@ -67,12 +68,6 @@ abstract class ComponentBenchmarkBase {
 		}
 		return inputStream.use(InputStream::readAllBytes)
 	}
-
-	//TODO: Refactor this copy-pasted crap
-	fun ipStringToInt(addressString: String): Int =
-		addressString.splitToSequence('.')
-			.map(Integer::parseInt)
-			.fold(0) { address, octet -> address.shl(8) + octet }
 }
 
 
@@ -128,7 +123,7 @@ open class ParserBenchmark : ComponentBenchmarkBase() {
 	}
 
 	@Benchmark
-	fun measure(blackhole: Blackhole): ParseResult {
+	fun measure(blackhole: Blackhole): LineToken {
 		return subject.parseNextLine(blackhole::consume)
 	}
 }
@@ -148,7 +143,7 @@ open class BitScaleBenchmark : ComponentBenchmarkBase() {
 	fun setup() {
 		val buffer = IntBuffer.wrap(datasetAsAddressList.toIntArray())
 		input = RewindingBufferHolder(buffer)
-		subject = BitScale(1L shl 32)
+		subject = BitScale(1L.shl(IPv4Address.SIZE))
 	}
 
 	@TearDown

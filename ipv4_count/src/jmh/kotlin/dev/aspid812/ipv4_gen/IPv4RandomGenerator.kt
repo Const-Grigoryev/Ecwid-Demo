@@ -5,6 +5,7 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import kotlin.random.Random
+import dev.aspid812.ipv4_count.impl.IPv4Address
 
 
 class IPv4RandomGenerator internal constructor(
@@ -12,7 +13,7 @@ class IPv4RandomGenerator internal constructor(
 	val pool: List<String>
 ) {
 	companion object {
-		const val RECOMMENDED_POOL_SIZE = 64000
+		const val RECOMMENDED_POOL_SIZE = 64_000
 	}
 
 	private val binaryPool = pool.map(String::toByteArray).toTypedArray()
@@ -52,16 +53,9 @@ class IPv4RandomGenerator internal constructor(
 }
 
 
-private const val OCTET_BITSIZE = 8
-private const val OCTET_MASK = (-1).shl(OCTET_BITSIZE).inv()
-
-private fun renderIPv4(address: Int) = sequenceOf(3, 2, 1, 0)
-	.map { place -> address.shr(place * OCTET_BITSIZE) and OCTET_MASK }
-	.joinToString(".")
-
 fun IPv4RandomGenerator(poolSize: Int): IPv4RandomGenerator {
 	//TODO: Should we take care of uniqueness of items in the pool?
 	val rng = Random.Default
-	val pool = List(poolSize) { renderIPv4(rng.nextInt()) + "\n" }
+	val pool = List(poolSize) { IPv4Address.toString(rng.nextInt()) + "\n" }
 	return IPv4RandomGenerator(rng, pool)
 }

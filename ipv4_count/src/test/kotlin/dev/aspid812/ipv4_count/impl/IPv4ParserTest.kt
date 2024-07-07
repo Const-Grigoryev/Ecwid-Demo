@@ -13,25 +13,10 @@ import org.mockito.Mockito.verifyNoMoreInteractions
 import java.io.Reader
 import java.io.StringReader
 
-import dev.aspid812.ipv4_count.impl.IPv4Parser.ParseResult
+import dev.aspid812.ipv4_count.impl.IPv4Parser.LineToken
 
 
 class IPv4ParserTest {
-
-	companion object {
-		private fun ipStringToInt(addressString: String): Int =
-			addressString.splitToSequence('.')
-				.map(Integer::parseInt)
-				.fold(0) { address, octet -> address.shl(8) + octet }
-	}
-
-	@Test
-	fun `Test utility sanity check`() {
-		assertEquals(0x7F000001,         ipStringToInt("127.0.0.1"))
-		assertEquals(0xAC10FE01.toInt(), ipStringToInt("172.16.254.1"))
-		assertEquals(0x08666768,         ipStringToInt("08.102.103.104"))
-	}
-
 
 	lateinit var subject: IPv4Parser
 	lateinit var sink: IPv4Builder
@@ -54,7 +39,7 @@ class IPv4ParserTest {
 
 			val result = subject.parseNextLine(sink)
 
-			assertNotEquals(ParseResult.ADDRESS, result)
+			assertNotEquals(LineToken.ADDRESS, result)
 			verifyNoInteractions(sink)
 		}
 
@@ -65,7 +50,7 @@ class IPv4ParserTest {
 
 			val result = subject.parseNextLine(sink)
 
-			assertNotEquals(ParseResult.ADDRESS, result)
+			assertNotEquals(LineToken.ADDRESS, result)
 			verifyNoInteractions(sink)
 		}
 
@@ -76,8 +61,8 @@ class IPv4ParserTest {
 
 			val result = subject.parseNextLine(sink)
 
-			val expectedAddress = ipStringToInt(addressString)
-			assertEquals(ParseResult.ADDRESS, result)
+			val expectedAddress = IPv4Address.parseInt(addressString)
+			assertEquals(LineToken.ADDRESS, result)
 			verify(sink).accept(expectedAddress)
 			verifyNoMoreInteractions(sink)
 		}
@@ -89,7 +74,7 @@ class IPv4ParserTest {
 
 			val result = subject.parseNextLine(sink)
 
-			assertNotEquals(ParseResult.ADDRESS, result)
+			assertNotEquals(LineToken.ADDRESS, result)
 			verifyNoInteractions(sink)
 		}
 
@@ -100,8 +85,8 @@ class IPv4ParserTest {
 
 			val result = subject.parseNextLine(sink)
 
-			val expectedAddress = ipStringToInt(addressString)
-			assertEquals(ParseResult.ADDRESS, result)
+			val expectedAddress = IPv4Address.parseInt(addressString)
+			assertEquals(LineToken.ADDRESS, result)
 			verify(sink).accept(expectedAddress)
 			verifyNoMoreInteractions(sink)
 		}
@@ -118,7 +103,7 @@ class IPv4ParserTest {
 
 			val result = subject.parseNextLine(sink)
 
-			assertEquals(ParseResult.NOTHING, result)
+			assertEquals(LineToken.NOTHING, result)
 			verifyNoInteractions(sink)
 		}
 
@@ -129,7 +114,7 @@ class IPv4ParserTest {
 
 			val actualResult = reads.map { subject.parseNextLine(sink) }
 
-			val expectedResult = reads.map { ParseResult.NOTHING }
+			val expectedResult = reads.map { LineToken.NOTHING }
 			assertEquals(expectedResult, actualResult)
 		}
 
@@ -144,7 +129,7 @@ class IPv4ParserTest {
 				subject.parseNextLine(sink)
 			)
 
-			assertEquals(ParseResult.ADDRESS, result[1])
+			assertEquals(LineToken.ADDRESS, result[1])
 		}
 	}
 }

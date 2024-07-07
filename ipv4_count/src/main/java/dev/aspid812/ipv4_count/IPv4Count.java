@@ -1,15 +1,17 @@
 package dev.aspid812.ipv4_count;
 
 import dev.aspid812.ipv4_count.impl.BitScale;
+import dev.aspid812.ipv4_count.impl.IPv4Address;
 import dev.aspid812.ipv4_count.impl.IPv4Parser;
-import dev.aspid812.ipv4_count.impl.IPv4Parser.ParseResult;
+import dev.aspid812.ipv4_count.impl.IPv4Parser.LineToken;
 
 import java.io.*;
 import java.nio.charset.Charset;
 
+
 public class IPv4Count {
 
-	private static final long IPv4_SPACE_SIZE = 1L << 32;
+	private static final long IPv4_SPACE_SIZE = 1L << IPv4Address.SIZE;
 
 	private static final int READER_BUFFER_LENGTH = 0x100000;
 
@@ -36,7 +38,7 @@ public class IPv4Count {
 				case MISTAKE:
 					yield errorHandler.onError(parser.getLastError());
 				default:
-					yield status == ParseResult.NOTHING;
+					yield status == LineToken.NOTHING;
 			};
 		}
 
