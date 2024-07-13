@@ -2,8 +2,7 @@ package dev.aspid812.ipv4_count;
 
 import dev.aspid812.ipv4_count.impl.BitScale;
 import dev.aspid812.ipv4_count.impl.IPv4Address;
-import dev.aspid812.ipv4_count.impl.IPv4Parser;
-import dev.aspid812.ipv4_count.impl.IPv4Parser.LineToken;
+import dev.aspid812.ipv4_count.impl.MutableIPv4Line;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -15,30 +14,36 @@ public class IPv4Count {
 
 	private static final int READER_BUFFER_LENGTH = 0x100000;
 
+	public enum ControlFlag {
+		TERMINATE,
+		PROCEED
+	}
 
 	@FunctionalInterface
 	public interface ErrorHandler {
-		boolean DECISION_TERMINATE = true;
-		boolean DECISION_PROCEED = false;
-
-		boolean onError(String error);
+		ControlFlag onError(String error);
 	}
 
 	static BitScale newAddressSet() {
 		return new BitScale(IPv4_SPACE_SIZE);
 	}
 
-	static BitScale accumulate(BitScale addressSet, IPv4Parser parser, ErrorHandler errorHandler) throws IOException {
-		var done = false;
-		while (!done) {
-			var status = parser.parseNextLine(address -> {
-				addressSet.witness(Integer.toUnsignedLong(address));
-			});
-			done = switch (status) {
-				case MISTAKE:
-					yield errorHandler.onError(parser.getLastError());
-				default:
-					yield status == LineToken.NOTHING;
+	static BitScale accumulate(BitScale addressSet, Reader input, ErrorHandler errorHandler) throws IOException {
+		var line = new MutableIPv4Line();
+		var flag = ControlFlag.PROCEED;
+		while (flag != ControlFlag.TERMINATE) {
+			var lineToken = line.parseLine(input);
+			flag = switch (lineToken) {
+				case VALID_ADDRESS:
+					var address = line.getAddress();
+					addressSet.witness(Integer.toUnsignedLong(address));
+					yield flag;
+
+				case IRRELEVANT_CONTENT:
+					yield errorHandler.onError(line.getErrorMessage());
+
+				case NOTHING:
+					yield ControlFlag.TERMINATE;
 			};
 		}
 
@@ -53,8 +58,6 @@ public class IPv4Count {
 		var linewiseInput = input instanceof LineNumberReader
 				? (LineNumberReader) input
 				: new LineNumberReader(input, READER_BUFFER_LENGTH);
-		var parser = new IPv4Parser(linewiseInput);
-
-		return accumulate(newAddressSet(), parser, errorHandler).count();
+		return accumulate(newAddressSet(), linewiseInput, errorHandler).count();
 	}
 }

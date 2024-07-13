@@ -2,7 +2,7 @@ import org.gradle.api.JavaVersion
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // name = "IPv4-count"
-// version = "0.1"
+version = "1.1"
 // description = "..."
 
 plugins {
@@ -31,6 +31,7 @@ repositories {
 dependencies {
     testImplementation("org.junit.jupiter", "junit-jupiter", "5.8.1")
     testImplementation("org.mockito", "mockito-core", "3.+")
+    testImplementation("org.mockito.kotlin", "mockito-kotlin", "5.3.1")
 }
 
 tasks.test {

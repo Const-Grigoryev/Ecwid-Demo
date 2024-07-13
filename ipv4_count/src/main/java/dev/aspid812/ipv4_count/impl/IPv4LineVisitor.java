@@ -8,27 +8,17 @@ import static dev.aspid812.ipv4_count.impl.IPv4Address.BITS_PER_OCTET;
 import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTET_MASK;
 
 
-public final class IPv4Parser {
+public interface IPv4LineVisitor<R> {
 
-	public enum LineToken {
-		ADDRESS,
-		MISTAKE,
-		NOTHING
+	R address(int address);
+	R mistake(String message);
+	R nothing();
+
+	private static boolean delimiter(int ch) {
+		return ch == '\n';
 	}
 
-	final Reader reader;
-
-	private String lastError;
-
-	public IPv4Parser(Reader reader) {
-		this.reader = reader;
-	}
-
-	public String getLastError() {
-		return lastError;
-	}
-
-	public LineToken parseNextLine(IPv4Builder sink) throws IOException {
+	default R parseLine(Reader input) throws IOException {
 		// Automaton's state summarizes a consumed portion (`p`) of the input string.
 		enum State {
 			OPEN_OCTET,     // `p` contains some octets, and the last one isn't complete yet; thus, `p` ends with a digit;
@@ -50,11 +40,11 @@ public final class IPv4Parser {
 
 			// **Assertion 2:** one and only one character is read at each iteration. This is correct because we
 			// do not receive a character from the reader anywhere else.
-			var ch = reader.read();
+			var ch = input.read();
 
 			// **Assertion 3:** the loop breaks when and only when it encounters an EOL or EOF character. Therefore,
 			// a single parser invocation consumes exactly one line from the input.
-			if (ch == -1 || ch == '\n')
+			if (ch == -1 || delimiter(ch))
 				break;
 
 			// **Assertion 4:** by now, we have already guaranteed that `ch` is a regular character, which belongs
@@ -92,26 +82,22 @@ public final class IPv4Parser {
 
 		// Compute classifying function: is the state our automaton has reached accepting or non-accepting?
 		// It can be thought of as a peculiar special case of a transition function for the EOL character. Thus,
-		// fall-through matters here as before. Watch you step!
-		var token = switch (state) {
+		// fall-through matters here as before (watch you step!). Finally, depending on the classification result,
+		// send a parsing product to a corresponding visitor/builder function.
+		return switch (state) {
 			case OPEN_OCTET:
 				if (++octets == OCTETS_PER_ADDRESS)
-					yield LineToken.ADDRESS;
+					yield address(address);
 
 			case CLOSED_OCTET:
 				if (octets == 0)
-					yield LineToken.NOTHING;
+					yield nothing();
 
 			default:
 				error = "Malformed address (too short)";
-				yield LineToken.MISTAKE;
-		};
 
-		// Finally, depending on a classification result, export a parsing product to an external holder.
-		lastError = error;
-		if (token == LineToken.ADDRESS) {
-			sink.accept(address);
-		}
-		return token;
+			case NONSENSE:
+				yield mistake(error);
+		};
 	}
 }

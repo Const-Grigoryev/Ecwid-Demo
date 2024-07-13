@@ -3,6 +3,7 @@ package dev.aspid812.ipv4_count.benchmark
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.LineNumberReader
+import java.io.Reader
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.IntBuffer
@@ -20,8 +21,7 @@ import dev.aspid812.ipv4_count.benchmark.util.CharBufferReader
 import dev.aspid812.ipv4_count.benchmark.util.RewindingBufferHolder
 import dev.aspid812.ipv4_count.impl.BitScale
 import dev.aspid812.ipv4_count.impl.IPv4Address
-import dev.aspid812.ipv4_count.impl.IPv4Parser
-import dev.aspid812.ipv4_count.impl.IPv4Parser.LineToken
+import dev.aspid812.ipv4_count.impl.MutableIPv4Line
 
 
 @State(Scope.Thread)
@@ -113,18 +113,20 @@ open class ReaderBenchmark : ComponentBenchmarkBase() {
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 open class ParserBenchmark : ComponentBenchmarkBase() {
 
-	lateinit var subject: IPv4Parser
+	lateinit var reader: Reader
+	lateinit var subject: MutableIPv4Line
 
 	@Setup(Level.Iteration)
 	fun setup() {
 		val buffer = CharBuffer.wrap(datasetAsText.toCharArray())
-		val reader = CharBufferReader(RewindingBufferHolder(buffer))
-		subject = IPv4Parser(reader)
+		reader = CharBufferReader(RewindingBufferHolder(buffer))
+		subject = MutableIPv4Line()
 	}
 
 	@Benchmark
-	fun measure(blackhole: Blackhole): LineToken {
-		return subject.parseNextLine(blackhole::consume)
+	fun measure(blackhole: Blackhole) {
+		blackhole.consume(subject.parseLine(reader))
+		blackhole.consume(subject.address)
 	}
 }
 

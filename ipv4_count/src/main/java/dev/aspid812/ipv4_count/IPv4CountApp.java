@@ -4,6 +4,7 @@ import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
+
 public class IPv4CountApp {
 
 	public static final int EXIT_OK = 0;
@@ -17,7 +18,7 @@ public class IPv4CountApp {
 		public static IPv4Count.ErrorHandler reportAndProceed(PrintStream logger) {
 			return error -> {
 				logger.println(error);
-				return IPv4Count.ErrorHandler.DECISION_PROCEED;
+				return IPv4Count.ControlFlag.PROCEED;
 			};
 		}
 	}
