@@ -19,9 +19,7 @@ import dev.aspid812.ipv4_count.benchmark.util.BufferProvider
 import dev.aspid812.ipv4_count.benchmark.util.ByteBufferInputStream
 import dev.aspid812.ipv4_count.benchmark.util.CharBufferReader
 import dev.aspid812.ipv4_count.benchmark.util.RewindingBufferHolder
-import dev.aspid812.ipv4_count.impl.BitScale
-import dev.aspid812.ipv4_count.impl.IPv4Address
-import dev.aspid812.ipv4_count.impl.MutableIPv4Line
+import dev.aspid812.ipv4_count.impl.*
 
 
 @State(Scope.Thread)
@@ -36,7 +34,7 @@ open class InitBenchmark :
 	@Benchmark
 	fun measure(): Long {
 		generator.newInputStream(0L).use { source ->
-			return counter.countUnique(source, StandardCharsets.UTF_8, newErrorHandler())
+			return counter.countUnique(source, newErrorHandler())
 		}
 	}
 }
@@ -81,28 +79,28 @@ open class ReaderBenchmark : ComponentBenchmarkBase() {
 		private const val LINE_FEED = '\n'.code
 	}
 
-//	@Param("UTF-8", "ASCII")
-	var encoding: String = "UTF-8"
-
 //	@Param("$DEFAULT_BUFFER_SIZE", "${0x100000}")
 	var buffer: Int = 0x100000
 
-	lateinit var subject: LineNumberReader
+//	lateinit var subject: LineNumberReader
+	lateinit var subject: LightweightReader
 
 	@Setup(Level.Iteration)
 	fun setup() {
 		val buffer = ByteBuffer.wrap(datasetAsRawBytes)
 		val stream = ByteBufferInputStream(RewindingBufferHolder(buffer))
-		val reader = InputStreamReader(stream, this.encoding)
-		subject = LineNumberReader(reader, this.buffer)
+//		val reader = InputStreamReader(stream, "UTF-8")
+//		subject = LineNumberReader(reader, this.buffer)
+		subject = LightweightInputStreamReader(stream)
 	}
 
 	@Benchmark
-	fun measure(): Int {
+	fun measure(): Boolean {
 		do {
 			val ch = subject.read()
 		} while (ch != LINE_FEED && ch != -1)
-		return subject.lineNumber
+//		return subject.lineNumber
+		return subject.eof()
 	}
 }
 

@@ -1,22 +1,25 @@
 package dev.aspid812.ipv4_count;
 
-import dev.aspid812.ipv4_count.impl.BitScale;
-import dev.aspid812.ipv4_count.impl.IPv4Address;
-import dev.aspid812.ipv4_count.impl.MutableIPv4Line;
+import dev.aspid812.ipv4_count.impl.*;
 
 import java.io.*;
-import java.nio.charset.Charset;
 
 
 public class IPv4Count {
 
 	private static final long IPv4_SPACE_SIZE = 1L << IPv4Address.SIZE;
 
-	private static final int READER_BUFFER_LENGTH = 0x100000;
-
 	public enum ControlFlag {
 		TERMINATE,
-		PROCEED
+		PROCEED;
+
+		static ControlFlag go() {
+			return PROCEED;
+		}
+
+		boolean allowsProceeding() {
+			return this != TERMINATE;
+		}
 	}
 
 	@FunctionalInterface
@@ -28,10 +31,10 @@ public class IPv4Count {
 		return new BitScale(IPv4_SPACE_SIZE);
 	}
 
-	static BitScale accumulate(BitScale addressSet, Reader input, ErrorHandler errorHandler) throws IOException {
+	static BitScale accumulate(BitScale addressSet, LightweightReader input, ErrorHandler errorHandler) throws IOException {
 		var line = new MutableIPv4Line();
-		var flag = ControlFlag.PROCEED;
-		while (flag != ControlFlag.TERMINATE) {
+		var flag = ControlFlag.go();
+		while (flag.allowsProceeding()) {
 			var lineToken = line.parseLine(input);
 			flag = switch (lineToken) {
 				case VALID_ADDRESS:
@@ -43,21 +46,18 @@ public class IPv4Count {
 					yield errorHandler.onError(line.getErrorMessage());
 
 				case NOTHING:
-					yield ControlFlag.TERMINATE;
+					yield input.eof() ? ControlFlag.TERMINATE : ControlFlag.PROCEED;
 			};
 		}
 
 		return addressSet;
 	}
 
-	public long countUnique(InputStream input, Charset charset, ErrorHandler errorHandler) throws IOException {
-		return countUnique(new InputStreamReader(input, charset), errorHandler);
+	public long countUnique(InputStream input, ErrorHandler errorHandler) throws IOException {
+		return countUnique(new LightweightInputStreamReader(input), errorHandler);
 	}
 
-	public long countUnique(Reader input, ErrorHandler errorHandler) throws IOException {
-		var linewiseInput = input instanceof LineNumberReader
-				? (LineNumberReader) input
-				: new LineNumberReader(input, READER_BUFFER_LENGTH);
-		return accumulate(newAddressSet(), linewiseInput, errorHandler).count();
+	public long countUnique(LightweightReader input, ErrorHandler errorHandler) throws IOException {
+		return accumulate(newAddressSet(), input, errorHandler).count();
 	}
 }

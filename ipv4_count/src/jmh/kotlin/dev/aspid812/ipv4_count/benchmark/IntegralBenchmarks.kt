@@ -71,7 +71,7 @@ abstract class IntegralBenchmarkBase :
 open class ApplicationBenchmark : IntegralBenchmarkBase() {
 
 	companion object {
-		// Since „callable references to top-level functions don't support fully-qualified syntax right now“
+		// Since „callable references to top-level functions don't support fully-qualified syntax right now,“
 		// (R. Elizarov, https://youtrack.jetbrains.com/issue/KT-52701), we have to work-around by aliasing import
 		val IPv4_GENERATOR_APP = ::IPv4RandomGeneratorApp_main
 		val IPv4_COUNT_APP = IPv4CountApp::main
@@ -130,14 +130,14 @@ open class EngineBenchmark :
 	@Benchmark
 	fun n01_liveInput(): Long {
 		generator.newInputStream(linesAsLong).use { source ->
-			return counter.countUnique(source, StandardCharsets.UTF_8, newErrorHandler())
+			return counter.countUnique(source, newErrorHandler())
 		}
 	}
 
 	@Benchmark
 	fun n02_fileInput(): Long {
 		Files.newInputStream(inputFile.toPath()).use { source ->
-			return counter.countUnique(source, StandardCharsets.UTF_8, newErrorHandler())
+			return counter.countUnique(source, newErrorHandler())
 		}
 	}
 }
@@ -153,7 +153,7 @@ open class LoadBenchmark :
 	private fun measure(lines: Long): Long {
 		require(lines >= 0)
 		generator.newInputStream(lines).use { source ->
-			return counter.countUnique(source, StandardCharsets.UTF_8, newErrorHandler())
+			return counter.countUnique(source, newErrorHandler())
 		}
 	}
 

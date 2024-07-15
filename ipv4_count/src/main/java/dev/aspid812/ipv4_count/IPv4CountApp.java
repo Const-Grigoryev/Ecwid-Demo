@@ -1,16 +1,12 @@
 package dev.aspid812.ipv4_count;
 
 import java.io.*;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 
 
 public class IPv4CountApp {
 
 	public static final int EXIT_OK = 0;
 	public static final int EXIT_FATAL = -1;
-
-	final Charset charset;
 
 	final IPv4Count engine = new IPv4Count();
 
@@ -23,13 +19,9 @@ public class IPv4CountApp {
 		}
 	}
 
-	public IPv4CountApp(Charset charset) {
-		this.charset = charset;
-	}
-
 	public int run(InputStream input, PrintStream output, PrintStream logger) {
 		try {
-			var count = engine.countUnique(input, charset, ErrorHandlers.reportAndProceed(logger));
+			var count = engine.countUnique(input, ErrorHandlers.reportAndProceed(logger));
 			output.println(count);
 		}
 		catch (IOException ex) {
@@ -41,7 +33,7 @@ public class IPv4CountApp {
 	}
 
 	public static void main(String[] args) {
-		var application = new IPv4CountApp(StandardCharsets.UTF_8);
+		var application = new IPv4CountApp();
 		var status = application.run(System.in, System.out, System.err);
 		if (status != EXIT_OK) {
 			System.exit(status);
