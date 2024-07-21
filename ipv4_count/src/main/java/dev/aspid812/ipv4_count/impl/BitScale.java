@@ -3,9 +3,10 @@ package dev.aspid812.ipv4_count.impl;
 import java.util.Arrays;
 
 
-public class BitScale {
+public final class BitScale {
 
-	public static final long BITS_PER_WORD = Long.SIZE;
+	static final long BITS_PER_WORD = Long.SIZE;
+
 	public static final long SIZE_LIMIT = Integer.MAX_VALUE * BITS_PER_WORD;
 
 	private final long size;

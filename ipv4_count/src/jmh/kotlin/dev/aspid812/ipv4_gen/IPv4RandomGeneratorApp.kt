@@ -42,7 +42,7 @@ class IPv4RandomGeneratorApp(
 
 	fun run(output: OutputStream, logger: PrintStream): Int {
 		try {
-			engine.sample(sampleSize, output)
+			engine.sample(sampleSize).draw(output)
 		}
 		catch (ex: IOException) {
 			ex.printStackTrace(logger)

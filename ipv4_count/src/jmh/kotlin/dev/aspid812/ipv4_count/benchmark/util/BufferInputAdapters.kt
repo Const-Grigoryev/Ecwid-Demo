@@ -7,59 +7,35 @@ import java.nio.ByteBuffer
 import java.nio.CharBuffer
 
 
-interface BufferProvider<out B : Buffer> {
-	fun buffer(): B
-}
+class BufferKeeper<B : Buffer>(
+	private val create: () -> B,
+	private val refill: (B) -> B
+) {
+	private var buffer: B? = create()
 
-
-open class BufferHolder<B : Buffer>(
-	private val buffer: B
-) : BufferProvider<B> {
-
-	override fun buffer(): B {
-		if (!buffer.hasRemaining()) {
-			refresh(buffer)
+	fun get(): B? {
+		var buf = buffer
+		if (buf != null && !buf.hasRemaining()) {
+			buf = refill(buf).takeIf { it.hasRemaining() }
+			buffer = buf
 		}
-		return buffer
-	}
-
-	protected open fun refresh(buffer: B) {}
-}
-
-
-class RewindingBufferHolder<B : Buffer>(
-	buffer: B
-) : BufferHolder<B>(buffer) {
-
-	override fun refresh(buffer: B) {
-		buffer.rewind()
+		return buf
 	}
 }
 
 
-private fun <B : Buffer> BufferProvider<B>.workingBuffer(): B? {
-	val buf = this.buffer()
-	return buf.takeIf { it.hasRemaining() }
-}
-
-private fun <B : Buffer> BufferProvider<B>.workingBuffer(demand: Int): Pair<B, Int>? {
-	val buf = this.buffer()
-	val supply = buf.remaining()
-	return Pair(buf, minOf(supply, demand)).takeIf { supply > 0 }
-}
-
-
-class ByteBufferInputStream(
-	private val provider: BufferProvider<ByteBuffer>
+private class ByteBufferInputStream(
+	private val bufferKeeper: BufferKeeper<ByteBuffer>
 ) : InputStream() {
 
 	override fun read(): Int {
-		val buf = provider.workingBuffer() ?: return -1
+		val buf = bufferKeeper.get() ?: return -1
 		return buf.get().toUByte().toInt()
 	}
 
 	override fun read(destArray: ByteArray, destOffset: Int, demand: Int): Int {
-		val (buf, supply) = provider.workingBuffer(demand) ?: return -1
+		val buf = bufferKeeper.get() ?: return -1
+		val supply = minOf(buf.remaining(), demand)
 		buf.get(destArray, destOffset, supply)
 		return supply
 	}
@@ -68,20 +44,28 @@ class ByteBufferInputStream(
 }
 
 
-class CharBufferReader(
-	private val provider: BufferProvider<CharBuffer>
+private class CharBufferReader(
+	private val bufferKeeper: BufferKeeper<CharBuffer>
 ) : Reader() {
 
 	override fun read(): Int {
-		val buf = provider.workingBuffer() ?: return -1
+		val buf = bufferKeeper.get() ?: return -1
 		return buf.get().code
 	}
 
 	override fun read(destArray: CharArray, destOffset: Int, demand: Int): Int {
-		val (buf, supply) = provider.workingBuffer(demand) ?: return -1
+		val buf = bufferKeeper.get() ?: return -1
+		val supply = minOf(buf.remaining(), demand)
 		buf.get(destArray, destOffset, supply)
 		return supply
 	}
 
 	override fun close() {}
 }
+
+
+fun ByteBufferInputStream(create: () -> ByteBuffer, refill: (ByteBuffer) -> ByteBuffer): InputStream =
+	ByteBufferInputStream(BufferKeeper(create, refill))
+
+fun CharBufferReader(create: () -> CharBuffer, refill: (CharBuffer) -> CharBuffer): Reader =
+	CharBufferReader(BufferKeeper(create, refill))

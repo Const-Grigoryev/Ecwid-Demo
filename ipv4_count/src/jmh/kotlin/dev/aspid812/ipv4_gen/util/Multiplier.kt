@@ -15,7 +15,7 @@ enum class Multiplier(
 
 		@JvmStatic
 		fun parseLong(numeral: String): Long {
-			// Extremely wasteful solution, but instead it looks pretty good!
+			// Extremely wasteful solution, but looks pretty good in return!
 			val (suffix, multiplier) = abbreviationMap
 				.mapValues { it.value.numericValue }
 				.filterKeys(numeral::endsWith)
@@ -25,6 +25,7 @@ enum class Multiplier(
 		}
 	}
 }
+
 
 // Nice, but useless for now
 //fun Multiplier.toLong() = this.numericValue

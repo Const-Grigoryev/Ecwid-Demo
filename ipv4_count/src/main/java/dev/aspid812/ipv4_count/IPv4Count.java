@@ -1,8 +1,9 @@
 package dev.aspid812.ipv4_count;
 
-import dev.aspid812.ipv4_count.impl.*;
+import java.io.InputStream;
+import java.io.IOException;
 
-import java.io.*;
+import dev.aspid812.ipv4_count.impl.*;
 
 
 public class IPv4Count {

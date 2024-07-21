@@ -1,74 +1,30 @@
 package dev.aspid812.ipv4_count.benchmark
 
-import java.io.File
 import java.lang.ProcessBuilder.Redirect
-import java.nio.charset.StandardCharsets
-import java.nio.file.*
+import java.nio.ByteBuffer
+import java.nio.channels.Channels
+import java.nio.channels.FileChannel
+import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import kotlin.io.path.inputStream
 
 import org.openjdk.jmh.annotations.*
-import org.openjdk.jmh.infra.Blackhole
 
+import dev.aspid812.ipv4_count.IPv4Count
 import dev.aspid812.ipv4_count.IPv4CountApp
+import dev.aspid812.ipv4_count.benchmark.util.ByteBufferInputStream
 import dev.aspid812.ipv4_count.benchmark.util.PrepareProcess
-import dev.aspid812.ipv4_count.benchmark.util.BlackholeOutputStream
-import dev.aspid812.ipv4_gen.util.Multiplier
+import dev.aspid812.ipv4_gen.IPv4RandomGenerator
+import dev.aspid812.ipv4_gen.IPv4RandomGenerator.Companion.RECOMMENDED_POOL_SIZE
 import dev.aspid812.ipv4_gen.main as IPv4RandomGeneratorApp_main
 
 
 @State(Scope.Thread)
-abstract class IntegralBenchmarkBase :
-	GeneratorFeaturedBenchmark by BenchmarkFeatures.generator()
-{
-	companion object Safety {
-		const val LARGE_FILE_PROP_KEY = "benchmark.safety.largeFile"
-		const val LARGE_FILE_THRESHOLD = 64_000_000L    // 64M lines is approx. 1 GB
-	}
-
-	abstract val lines: String
-
-	open val physicalInputFile = true
-
-	var inputFilePath = null as Path?
-
-	val linesAsLong: Long
-		get() = Multiplier.parseLong(lines)
-
-	val inputFile: File
-		get() = inputFilePath?.toFile() ?: TODO("Return /dev/null or NUL, depending on the user OS")
-
-	fun largeFileSafetyCheck(): Boolean {
-		val enabled = System.getProperty(LARGE_FILE_PROP_KEY)?.toBooleanStrictOrNull() ?: true
-		val failed = enabled && linesAsLong > LARGE_FILE_THRESHOLD
-		if (failed) {
-			System.err.println(
-				"""Safety setting prevents generation of a large file. Set -D$LARGE_FILE_PROP_KEY=false
-				manually to disable this handy foolproof check."""
-			)
-		}
-		return !failed
-	}
-
-	@Setup
-	fun setup() {
-		if (physicalInputFile) {
-			val tempDirPath = Path.of(System.getProperty("java.io.tmpdir"))
-			val filePath = tempDirPath.resolve("RandomIPs-$lines.txt")
-			if (Files.notExists(filePath) && largeFileSafetyCheck()) {
-				Files.newOutputStream(filePath).use { output ->
-					generator.sample(linesAsLong, output)
-				}
-			}
-			inputFilePath = filePath
-		}
-	}
-}
-
-
 @Fork(1)
+@Measurement(iterations = 5)
 @BenchmarkMode(Mode.SingleShotTime)
-@State(Scope.Thread)
-open class ApplicationBenchmark : IntegralBenchmarkBase() {
+@OutputTimeUnit(TimeUnit.MILLISECONDS)
+open class BI01_ModesComparison : ExternalDatasetFeaturedBenchmark {
 
 	companion object {
 		// Since „callable references to top-level functions don't support fully-qualified syntax right now,“
@@ -77,110 +33,75 @@ open class ApplicationBenchmark : IntegralBenchmarkBase() {
 		val IPv4_COUNT_APP = IPv4CountApp::main
 	}
 
+	private val generator = IPv4RandomGenerator(RECOMMENDED_POOL_SIZE)
+	private val counter = IPv4Count()
+
+	open fun newErrorHandler() = BenchmarkFeatures.newThrowingErrorHandler()
+
 	@Param("1K", "25K", "1M", "16M")
 	override lateinit var lines: String
 
-	@Benchmark
-	fun n00_generateOnly() {
-		val process = PrepareProcess.java(IPv4_GENERATOR_APP, "-n$lines")
-			.redirectOutput(Redirect.DISCARD)
-			.start()
-		process.waitFor()
+	lateinit var datasetPath: Path
+
+	@Setup
+	fun setup() {
+		datasetPath = ensureDatasetPresent(generator::sample)
 	}
 
 	@Benchmark
-	fun n01_liveInput() {
-		val processes = ProcessBuilder.startPipeline(listOf(
-			PrepareProcess.java(IPv4_GENERATOR_APP, "-n$lines"),
-			PrepareProcess.java(IPv4_COUNT_APP)
-				.redirectOutput(Redirect.DISCARD)
-		))
-		processes.last().waitFor()
-	}
-
-	@Benchmark
-	fun n02_fileInput() {
+	fun v1_application() {
 		val process = PrepareProcess.java(IPv4_COUNT_APP)
-			.redirectInput(inputFile)
+			.redirectInput(datasetPath.toFile())
 			.redirectOutput(Redirect.DISCARD)
 			.start()
 		process.waitFor()
 	}
+
+	@Benchmark
+	fun v2_library_file(): Long {
+		datasetPath.inputStream().buffered().use { input ->
+			return counter.countUnique(input, newErrorHandler())
+		}
+	}
+
+	@Benchmark
+	fun v3_library_nio(): Long {
+		FileChannel.open(datasetPath).use { channel ->
+			val stream = ByteBufferInputStream(
+				create = { ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).limit(0) },
+				refill = { it.clear().also(channel::read).flip() }
+			)
+			return counter.countUnique(stream, newErrorHandler())
+		}
+	}
+
+	@Benchmark
+	fun v4_library_gen(): Long {
+		generator.openInputStream(linesNumber).use { input ->
+			return counter.countUnique(input, newErrorHandler())
+		}
+	}
 }
 
 
+@State(Scope.Thread)
 @Fork(1)
 @BenchmarkMode(Mode.SingleShotTime)
-@State(Scope.Thread)
-open class EngineBenchmark :
-	IntegralBenchmarkBase(),
-	CounterFeaturedBenchmark by BenchmarkFeatures.counter()
-{
-	@Param("1K", "25K", "1M", "16M")
+@OutputTimeUnit(TimeUnit.SECONDS)
+open class BI02_Performance : ExternalDatasetFeaturedBenchmark {
+
+	private val generator = IPv4RandomGenerator(RECOMMENDED_POOL_SIZE)
+	private val counter = IPv4Count()
+
+	open fun newErrorHandler() = BenchmarkFeatures.newThrowingErrorHandler()
+
+	@Param("1K", "25K", "1M", "16M", "200M", "8B")
 	override lateinit var lines: String
 
 	@Benchmark
-	fun n00_generateOnly(blackhole: Blackhole) {
-		generator.newInputStream(linesAsLong).use { source ->
-			val destination = BlackholeOutputStream(blackhole)
-			source.transferTo(destination)
+	fun v1_measure(): Long {
+		generator.openInputStream(linesNumber).use { input ->
+			return counter.countUnique(input, newErrorHandler())
 		}
 	}
-
-	@Benchmark
-	fun n01_liveInput(): Long {
-		generator.newInputStream(linesAsLong).use { source ->
-			return counter.countUnique(source, newErrorHandler())
-		}
-	}
-
-	@Benchmark
-	fun n02_fileInput(): Long {
-		Files.newInputStream(inputFile.toPath()).use { source ->
-			return counter.countUnique(source, newErrorHandler())
-		}
-	}
-}
-
-
-@Fork(1)
-@BenchmarkMode(Mode.SingleShotTime)
-@State(Scope.Thread)
-open class LoadBenchmark :
-	GeneratorFeaturedBenchmark by BenchmarkFeatures.generator(),
-	CounterFeaturedBenchmark by BenchmarkFeatures.counter()
-{
-	private fun measure(lines: Long): Long {
-		require(lines >= 0)
-		generator.newInputStream(lines).use { source ->
-			return counter.countUnique(source, newErrorHandler())
-		}
-	}
-
-	@Warmup(iterations = 5)
-	@Measurement(iterations = 15)
-	@Benchmark
-	fun n01_measure_1k() = measure(1_000)
-
-	@Warmup(iterations = 3)
-	@Measurement(iterations = 10)
-	@Benchmark
-	fun n02_measure_25k() = measure(25_000)
-
-	@Warmup(iterations = 1)
-	@Measurement(iterations = 5)
-	@Benchmark
-	fun n03_measure_1m() = measure(1_000_000)
-
-	@Warmup(iterations = 1)
-	@Measurement(iterations = 3)
-	@Benchmark
-	fun n04_measure_16m() = measure(16_000_000)
-
-	@Benchmark
-	fun n05_measure_200m() = measure(200_000_000)
-
-	@Timeout(time = 4, timeUnit = TimeUnit.HOURS)
-	@Benchmark
-	fun n06_measure_8b() = measure(8_000_000_000)
 }
