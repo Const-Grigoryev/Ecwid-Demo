@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // name = "IPv4-count"
 version = "1.1"
-// description = "..."
+description = "Count unique IP addresses listed in a text file"
 
 plugins {
     kotlin("jvm") version "1.9.24"
