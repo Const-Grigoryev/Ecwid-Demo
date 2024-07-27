@@ -29,36 +29,48 @@ public class IPv4Count {
 		ControlFlag onError(String error);
 	}
 
-	static void accumulate(BitScale addressSet, LightweightReader input, ErrorHandler errorHandler) throws IOException {
-		var line = new MutableIPv4Line();
-		var flag = ControlFlag.go();
-		while (flag.allowsProceeding()) {
-			var lineToken = line.parseLine(input);
-			flag = switch (lineToken) {
-				case VALID_ADDRESS:
-					var address = line.getAddress();
-					addressSet.witness(Integer.toUnsignedLong(address));
-					yield flag;
+	private static IPv4CountImpl newImplementor() {
+		return new IPv4CountImpl() {
+			@Override
+			public OptionalLong uniqueAddresses() {
+				return OptionalLong.of(addressSet.count());
+			}
 
-				case IRRELEVANT_CONTENT:
-					yield errorHandler.onError(line.getErrorMessage());
+			@Override
+			public void account(LightweightReader input, ErrorHandler errorHandler) throws IOException {
+				var line = new MutableIPv4Line();
+				var flag = ControlFlag.go();
+				while (flag.allowsProceeding()) {
+					var lineToken = line.parseLine(input);
+					flag = switch (lineToken) {
+						case VALID_ADDRESS:
+							var address = line.getAddress();
+							addressSet.witness(Integer.toUnsignedLong(address));
+							yield flag;
 
-				case NOTHING:
-					yield input.eof() ? ControlFlag.TERMINATE : ControlFlag.PROCEED;
-			};
-		}
+						case IRRELEVANT_CONTENT:
+							yield errorHandler.onError(line.getErrorMessage());
+
+						case NOTHING:
+							yield input.eof() ? ControlFlag.TERMINATE : ControlFlag.PROCEED;
+					};
+				}
+			}
+
+			private final BitScale addressSet = new BitScale(IPv4_SPACE_SIZE);
+		};
 	}
 
-	final BitScale addressSet = new BitScale(IPv4_SPACE_SIZE);
-
 	final ErrorHandler errorHandler;
+
+	private final IPv4CountImpl implementor = newImplementor();
 
 	public IPv4Count(ErrorHandler errorHandler) {
 		this.errorHandler = errorHandler;
 	}
 
 	public OptionalLong uniqueAddresses() {
-		return OptionalLong.of(addressSet.count());
+		return implementor.uniqueAddresses();
 	}
 
 	public void account(InputStream input) throws IOException {
@@ -66,6 +78,6 @@ public class IPv4Count {
 	}
 
 	public void account(LightweightReader input) throws IOException {
-		accumulate(addressSet, input, errorHandler);
+		implementor.account(input, errorHandler);
 	}
 }
