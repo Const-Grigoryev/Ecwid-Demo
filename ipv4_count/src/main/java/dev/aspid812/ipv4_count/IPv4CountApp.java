@@ -2,33 +2,38 @@ package dev.aspid812.ipv4_count;
 
 import java.io.*;
 
+import dev.aspid812.ipv4_count.IPv4Count.ControlFlag;
+import dev.aspid812.ipv4_count.IPv4Count.ErrorHandler;
+
 
 public class IPv4CountApp {
 
 	public static final int EXIT_OK = 0;
 	public static final int EXIT_FATAL = -1;
 
-	final IPv4Count engine = new IPv4Count();
-
-	static class ErrorHandlers {
-		public static IPv4Count.ErrorHandler reportAndProceed(PrintStream logger) {
+	enum ErrorHandlers {;
+		public static ErrorHandler reportAndProceed(PrintStream logger) {
 			return error -> {
 				logger.println(error);
-				return IPv4Count.ControlFlag.PROCEED;
+				return ControlFlag.PROCEED;
 			};
 		}
 	}
 
 	public int run(InputStream input, PrintStream output, PrintStream logger) {
+		var errorHandler = ErrorHandlers.reportAndProceed(logger);
+		var counter = new IPv4Count(errorHandler);
 		try {
-			var count = engine.countUnique(input, ErrorHandlers.reportAndProceed(logger));
-			output.println(count);
+			counter.account(input);
 		}
 		catch (IOException ex) {
 			ex.printStackTrace(logger);
 			return EXIT_FATAL;
 		}
 
+		counter.uniqueAddresses().ifPresent((count) -> {
+			output.println(count);
+		});
 		return EXIT_OK;
 	}
 

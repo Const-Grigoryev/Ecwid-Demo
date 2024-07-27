@@ -88,7 +88,7 @@ interface ExternalDatasetFeaturedBenchmark {
 
 	fun ensureDatasetPresent(sample: (Long) -> Sample): Path {
 		val datasetPath = computeDatasetPath(lines)
-		if (datasetPath.notExists()) {
+		if (!datasetPath.exists()) {
 			checkDatasetHasSaneSize(linesNumber)
 			writeDatasetFile(datasetPath, sample(linesNumber))
 		}

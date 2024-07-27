@@ -28,15 +28,15 @@ import dev.aspid812.ipv4_count.impl.*
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 open class BC01_Initialization {
 
-	private val counter = IPv4Count()
-
-	open fun newErrorHandler() = BenchmarkFeatures.newThrowingErrorHandler()
+	private val errorHandler = BenchmarkFeatures.newThrowingErrorHandler()
+	private val counter = IPv4Count(errorHandler)
 
 	@Benchmark
 	fun v1_init(): Long {
 		InputStream.nullInputStream().use { source ->
-			return counter.countUnique(source, newErrorHandler())
+			counter.account(source)
 		}
+		return counter.uniqueAddresses().asLong
 	}
 }
 

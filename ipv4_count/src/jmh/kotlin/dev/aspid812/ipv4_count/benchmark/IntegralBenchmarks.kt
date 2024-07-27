@@ -2,7 +2,6 @@ package dev.aspid812.ipv4_count.benchmark
 
 import java.lang.ProcessBuilder.Redirect
 import java.nio.ByteBuffer
-import java.nio.channels.Channels
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -33,10 +32,9 @@ open class BI01_ModesComparison : ExternalDatasetFeaturedBenchmark {
 		val IPv4_COUNT_APP = IPv4CountApp::main
 	}
 
+	private val errorHandler = BenchmarkFeatures.newThrowingErrorHandler()
 	private val generator = IPv4RandomGenerator(RECOMMENDED_POOL_SIZE)
-	private val counter = IPv4Count()
-
-	open fun newErrorHandler() = BenchmarkFeatures.newThrowingErrorHandler()
+	private val counter = IPv4Count(errorHandler)
 
 	@Param("1K", "25K", "1M", "16M")
 	override lateinit var lines: String
@@ -60,8 +58,9 @@ open class BI01_ModesComparison : ExternalDatasetFeaturedBenchmark {
 	@Benchmark
 	fun v2_library_file(): Long {
 		datasetPath.inputStream().buffered().use { input ->
-			return counter.countUnique(input, newErrorHandler())
+			counter.account(input)
 		}
+		return counter.uniqueAddresses().asLong
 	}
 
 	@Benchmark
@@ -71,15 +70,17 @@ open class BI01_ModesComparison : ExternalDatasetFeaturedBenchmark {
 				create = { ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).limit(0) },
 				refill = { it.clear().also(channel::read).flip() }
 			)
-			return counter.countUnique(stream, newErrorHandler())
+			counter.account(stream)
+			return counter.uniqueAddresses().asLong
 		}
 	}
 
 	@Benchmark
 	fun v4_library_gen(): Long {
 		generator.openInputStream(linesNumber).use { input ->
-			return counter.countUnique(input, newErrorHandler())
+			counter.account(input)
 		}
+		return counter.uniqueAddresses().asLong
 	}
 }
 
@@ -90,10 +91,9 @@ open class BI01_ModesComparison : ExternalDatasetFeaturedBenchmark {
 @OutputTimeUnit(TimeUnit.SECONDS)
 open class BI02_Performance : ExternalDatasetFeaturedBenchmark {
 
+	private val errorHandler = BenchmarkFeatures.newThrowingErrorHandler()
 	private val generator = IPv4RandomGenerator(RECOMMENDED_POOL_SIZE)
-	private val counter = IPv4Count()
-
-	open fun newErrorHandler() = BenchmarkFeatures.newThrowingErrorHandler()
+	private val counter = IPv4Count(errorHandler)
 
 	@Param("1K", "25K", "1M", "16M", "200M", "8B")
 	override lateinit var lines: String
@@ -101,7 +101,8 @@ open class BI02_Performance : ExternalDatasetFeaturedBenchmark {
 	@Benchmark
 	fun v1_measure(): Long {
 		generator.openInputStream(linesNumber).use { input ->
-			return counter.countUnique(input, newErrorHandler())
+			counter.account(input)
 		}
+		return counter.uniqueAddresses().asLong
 	}
 }

@@ -2,6 +2,7 @@ package dev.aspid812.ipv4_count.impl;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Objects;
 
 
 public final class LightweightInputStreamReader extends LightweightReader {
@@ -21,7 +22,7 @@ public final class LightweightInputStreamReader extends LightweightReader {
 	private int lookback = 0;
 
 	public LightweightInputStreamReader(InputStream input) {
-		this.input = input;
+		this.input = Objects.requireNonNull(input);
 	}
 
 	int decode(int bytes, int defaultValue) {

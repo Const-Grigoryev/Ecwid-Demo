@@ -2,6 +2,7 @@ package dev.aspid812.ipv4_count;
 
 import java.io.InputStream;
 import java.io.IOException;
+import java.util.OptionalLong;
 
 import dev.aspid812.ipv4_count.impl.*;
 
@@ -28,11 +29,7 @@ public class IPv4Count {
 		ControlFlag onError(String error);
 	}
 
-	static BitScale newAddressSet() {
-		return new BitScale(IPv4_SPACE_SIZE);
-	}
-
-	static BitScale accumulate(BitScale addressSet, LightweightReader input, ErrorHandler errorHandler) throws IOException {
+	static void accumulate(BitScale addressSet, LightweightReader input, ErrorHandler errorHandler) throws IOException {
 		var line = new MutableIPv4Line();
 		var flag = ControlFlag.go();
 		while (flag.allowsProceeding()) {
@@ -50,15 +47,25 @@ public class IPv4Count {
 					yield input.eof() ? ControlFlag.TERMINATE : ControlFlag.PROCEED;
 			};
 		}
-
-		return addressSet;
 	}
 
-	public long countUnique(InputStream input, ErrorHandler errorHandler) throws IOException {
-		return countUnique(new LightweightInputStreamReader(input), errorHandler);
+	final BitScale addressSet = new BitScale(IPv4_SPACE_SIZE);
+
+	final ErrorHandler errorHandler;
+
+	public IPv4Count(ErrorHandler errorHandler) {
+		this.errorHandler = errorHandler;
 	}
 
-	public long countUnique(LightweightReader input, ErrorHandler errorHandler) throws IOException {
-		return accumulate(newAddressSet(), input, errorHandler).count();
+	public OptionalLong uniqueAddresses() {
+		return OptionalLong.of(addressSet.count());
+	}
+
+	public void account(InputStream input) throws IOException {
+		account(new LightweightInputStreamReader(input));
+	}
+
+	public void account(LightweightReader input) throws IOException {
+		accumulate(addressSet, input, errorHandler);
 	}
 }

@@ -318,7 +318,7 @@ JMH не предназначен тестирования отдельных п
     BC04_AddressSet.v0                      avgt   60     3.582 ±    0.364  ns/op
     BC04_AddressSet.v1_bitScale             avgt   60     8.065 ±    0.071  ns/op
 
- #### Linux
+#### Linux
 
     Benchmark                    (dataset)  Mode  Cnt     Score   Error  Units
     BC01_Initialization.v1_init        N/A  avgt   60    79.524 ± 0.222  ms/op
