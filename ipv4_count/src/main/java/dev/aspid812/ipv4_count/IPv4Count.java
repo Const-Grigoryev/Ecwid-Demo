@@ -9,18 +9,16 @@ import dev.aspid812.ipv4_count.impl.*;
 
 public class IPv4Count {
 
-	private static final long IPv4_SPACE_SIZE = 1L << IPv4Address.SIZE;
-
 	public enum ControlFlag {
-		TERMINATE,
+		FAIL,
 		PROCEED;
 
-		static ControlFlag go() {
+		public static ControlFlag go() {
 			return PROCEED;
 		}
 
-		boolean allowsProceeding() {
-			return this != TERMINATE;
+		public boolean allowsProceeding() {
+			return this != FAIL;
 		}
 	}
 
@@ -29,44 +27,19 @@ public class IPv4Count {
 		ControlFlag onError(String error);
 	}
 
-	private static IPv4CountImpl newImplementor() {
-		return new IPv4CountImpl() {
-			@Override
-			public OptionalLong uniqueAddresses() {
-				return OptionalLong.of(addressSet.count());
-			}
-
-			@Override
-			public void account(LightweightReader input, ErrorHandler errorHandler) throws IOException {
-				var line = new MutableIPv4Line();
-				var flag = ControlFlag.go();
-				while (flag.allowsProceeding()) {
-					var lineToken = line.parseLine(input);
-					flag = switch (lineToken) {
-						case VALID_ADDRESS:
-							var address = line.getAddress();
-							addressSet.witness(Integer.toUnsignedLong(address));
-							yield flag;
-
-						case IRRELEVANT_CONTENT:
-							yield errorHandler.onError(line.getErrorMessage());
-
-						case NOTHING:
-							yield input.eof() ? ControlFlag.TERMINATE : ControlFlag.PROCEED;
-					};
-				}
-			}
-
-			private final BitScale addressSet = new BitScale(IPv4_SPACE_SIZE);
-		};
-	}
-
 	final ErrorHandler errorHandler;
 
-	private final IPv4CountImpl implementor = newImplementor();
+	private IPv4CountImpl implementor = IPv4CountImpl.forHealthyState();
 
 	public IPv4Count(ErrorHandler errorHandler) {
 		this.errorHandler = errorHandler;
+	}
+
+	private IPv4CountImpl switchImplementor(ControlFlag flag) {
+		return switch (flag) {
+			case FAIL -> IPv4CountImpl.forFailedState();
+			default -> implementor;
+		};
 	}
 
 	public OptionalLong uniqueAddresses() {
@@ -78,6 +51,12 @@ public class IPv4Count {
 	}
 
 	public void account(LightweightReader input) throws IOException {
-		implementor.account(input, errorHandler);
+		var flag = ControlFlag.FAIL;
+		try {
+			flag = implementor.account(input, errorHandler);
+		}
+		finally {
+			implementor = switchImplementor(flag);
+		}
 	}
 }
