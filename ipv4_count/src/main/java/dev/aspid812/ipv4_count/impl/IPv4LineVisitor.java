@@ -2,10 +2,14 @@ package dev.aspid812.ipv4_count.impl;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.io.UncheckedIOException;
+import java.util.function.IntSupplier;
 
 import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTETS_PER_ADDRESS;
 import static dev.aspid812.ipv4_count.impl.IPv4Address.BITS_PER_OCTET;
 import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTET_MASK;
+
+import dev.aspid812.ipv4_count.impl.IPv4LineVisitor.Parser.State;
 
 
 public interface IPv4LineVisitor<R> {
@@ -18,7 +22,7 @@ public interface IPv4LineVisitor<R> {
 		return ch == '\n';
 	}
 
-	default R parseLine(Reader input) throws IOException {
+	final class Parser {
 		// Automaton's state summarizes a consumed portion (`p`) of the input string.
 		enum State {
 			OPEN_OCTET,     // `p` contains some octets, and the last one isn't complete yet; thus, `p` ends with a digit;
@@ -26,21 +30,29 @@ public interface IPv4LineVisitor<R> {
 			NONSENSE        // `p` may not be a prefix of any recognizable substance (valid IP address).
 		}
 
+		private int address = 0x00;
+		private String error = null;
+
+		private int octets = 0;
+		private State state = State.CLOSED_OCTET;
+	}
+
+	default R parseLine(IntSupplier input, Parser parser) {
 		// Output registers: construction site of a parsing product.
-		var address = 0x00;
-		var error = (String) null;
+		var address = parser.address;
+		var error = parser.error;
 
 		// Loop over characters of the input string (single line), changing `state` after each. The variable named
 		// `octets` counts closed octets and, strictly speaking, this number is a part of automaton's state too.
-		var octets = 0;
-		var state = State.CLOSED_OCTET;
+		var octets = parser.octets;
+		var state = parser.state;
 		while (true) {
 			// **Assertion 1 (loop invariant):** regardless of the state, `0 <= octets && octets < OCTETS_PER_ADDRESS`
 			// both before and after the loop's body.
 
 			// **Assertion 2:** one and only one character is read at each iteration. This is correct because we
 			// do not receive a character from the reader anywhere else.
-			var ch = input.read();
+			var ch = input.getAsInt();
 
 			// **Assertion 3:** the loop breaks when and only when it encounters an EOL or EOF character. Therefore,
 			// a single parser invocation consumes exactly one line from the input.
@@ -80,6 +92,12 @@ public interface IPv4LineVisitor<R> {
 			};
 		}
 
+		// Store the final state for a future use
+		parser.address = address;
+		parser.error = error;
+		parser.octets = octets;
+		parser.state = state;
+
 		// Compute classifying function: is the state our automaton has reached accepting or non-accepting?
 		// It can be thought of as a peculiar special case of a transition function for the EOL character. Thus,
 		// fall-through matters here as before (watch you step!). Finally, depending on the classification result,
@@ -99,5 +117,23 @@ public interface IPv4LineVisitor<R> {
 			case NONSENSE:
 				yield mistake(error);
 		};
+	}
+
+	default R parseLine(Reader input) throws IOException {
+		var dealer = (IntSupplier) () -> {
+			try {
+				return input.read();
+			}
+			catch (IOException ex) {
+				throw new UncheckedIOException(ex);
+			}
+		};
+
+		try {
+			return parseLine(dealer, new Parser());
+		}
+		catch (UncheckedIOException ex) {
+			throw ex.getCause();
+		}
 	}
 }

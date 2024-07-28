@@ -1,6 +1,7 @@
 package dev.aspid812.ipv4_count.impl
 
 import java.io.Reader
+import java.util.function.IntSupplier
 
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
@@ -13,7 +14,7 @@ import dev.aspid812.ipv4_count.util.reader
 
 class IPv4LineVisitorTest {
 
-	private sealed interface IPv4Line {
+	sealed interface IPv4Line {
 		data class Address(val address: Int) : IPv4Line
 		data object Mistake: IPv4Line
 		data object Nothing: IPv4Line
@@ -83,6 +84,25 @@ class IPv4LineVisitorTest {
 			}
 
 			assertEquals(expectedResult, actualResult)
+		}
+
+		@Test
+		fun `Input string may be read by pieces`() {
+			val stringPieces = "3.14.\t159.26".split("\t")
+			val parser = IPv4LineVisitor.Parser()
+			subject = IPv4Line.Factory
+
+			var actual: Any = IPv4Line.Nothing
+			for (piece in stringPieces) {
+				val iter = piece.iterator()
+				val dealer = IntSupplier { if (iter.hasNext()) iter.nextChar().code else -1 }
+				actual = subject.parseLine(dealer, parser)
+			}
+
+			val expected = stringPieces.joinToString("")
+				.let(IPv4Address::parseInt)
+				.let(IPv4Line::Address)
+			assertEquals(expected, actual)
 		}
 	}
 
