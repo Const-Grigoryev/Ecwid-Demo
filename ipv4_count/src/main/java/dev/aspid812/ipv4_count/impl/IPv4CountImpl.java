@@ -1,10 +1,12 @@
 package dev.aspid812.ipv4_count.impl;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.OptionalLong;
 
 import dev.aspid812.ipv4_count.IPv4Count.ControlFlag;
 import dev.aspid812.ipv4_count.IPv4Count.ErrorHandler;
+import dev.aspid812.ipv4_count.impl.MutableIPv4Line.LineToken;
 
 
 public interface IPv4CountImpl {
@@ -38,7 +40,13 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 		var line = new MutableIPv4Line();
 		var flag = ControlFlag.go();
 		while (flag.allowsProceeding() && !input.eof()) {
-			var lineToken = line.parseLine(input);
+			var lineToken = (LineToken) null;
+			try {
+				lineToken = line.parseLine(input);
+			}
+			catch (UncheckedIOException ex) {
+				throw ex.getCause();
+			}
 			flag = switch (lineToken) {
 				case VALID_ADDRESS:
 					var address = line.getAddress();

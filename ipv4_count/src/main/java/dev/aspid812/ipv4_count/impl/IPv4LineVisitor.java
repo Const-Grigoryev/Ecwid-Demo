@@ -3,6 +3,7 @@ package dev.aspid812.ipv4_count.impl;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
+import java.nio.CharBuffer;
 import java.util.function.IntSupplier;
 
 import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTETS_PER_ADDRESS;
@@ -37,7 +38,14 @@ public interface IPv4LineVisitor<R> {
 		private State state = State.CLOSED_OCTET;
 	}
 
-	default R parseLine(IntSupplier input, Parser parser) {
+	default R parseLine(CharBuffer input, Parser parser, boolean eof) {
+		var dealer = (IntSupplier) () -> input.hasRemaining() ? input.get() : -1;
+		return parseLine(dealer, parser, eof);
+	}
+
+	default R parseLine(IntSupplier input, Parser parser, boolean eof) {
+		var eol = false;
+
 		// Output registers: construction site of a parsing product.
 		var address = parser.address;
 		var error = parser.error;
@@ -56,7 +64,7 @@ public interface IPv4LineVisitor<R> {
 
 			// **Assertion 3:** the loop breaks when and only when it encounters an EOL or EOF character. Therefore,
 			// a single parser invocation consumes exactly one line from the input.
-			if (ch == -1 || delimiter(ch))
+			if (ch == -1 || (eol = delimiter(ch)))
 				break;
 
 			// **Assertion 4:** by now, we have already guaranteed that `ch` is a regular character, which belongs
@@ -92,17 +100,11 @@ public interface IPv4LineVisitor<R> {
 			};
 		}
 
-		// Store the final state for a future use
-		parser.address = address;
-		parser.error = error;
-		parser.octets = octets;
-		parser.state = state;
-
 		// Compute classifying function: is the state our automaton has reached accepting or non-accepting?
 		// It can be thought of as a peculiar special case of a transition function for the EOL character. Thus,
 		// fall-through matters here as before (watch you step!). Finally, depending on the classification result,
 		// send a parsing product to a corresponding visitor/builder function.
-		return switch (state) {
+		var result = !(eol || eof) ? null : switch (state) {
 			case OPEN_OCTET:
 				if (++octets == OCTETS_PER_ADDRESS)
 					yield address(address);
@@ -117,9 +119,16 @@ public interface IPv4LineVisitor<R> {
 			case NONSENSE:
 				yield mistake(error);
 		};
+
+		// Store the final state for a future use
+		parser.address = address;
+		parser.error = error;
+		parser.octets = octets;
+		parser.state = state;
+		return result;
 	}
 
-	default R parseLine(Reader input) throws IOException {
+	default R parseLine(Reader input) {
 		var dealer = (IntSupplier) () -> {
 			try {
 				return input.read();
@@ -129,11 +138,6 @@ public interface IPv4LineVisitor<R> {
 			}
 		};
 
-		try {
-			return parseLine(dealer, new Parser());
-		}
-		catch (UncheckedIOException ex) {
-			throw ex.getCause();
-		}
+		return parseLine(dealer, new Parser(), true);
 	}
 }

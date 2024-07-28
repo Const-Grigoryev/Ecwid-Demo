@@ -1,6 +1,7 @@
 package dev.aspid812.ipv4_count.impl
 
 import java.io.Reader
+import java.nio.CharBuffer
 import java.util.function.IntSupplier
 
 import org.junit.jupiter.api.*
@@ -92,16 +93,12 @@ class IPv4LineVisitorTest {
 			val parser = IPv4LineVisitor.Parser()
 			subject = IPv4Line.Factory
 
-			var actual: Any = IPv4Line.Nothing
-			for (piece in stringPieces) {
-				val iter = piece.iterator()
-				val dealer = IntSupplier { if (iter.hasNext()) iter.nextChar().code else -1 }
-				actual = subject.parseLine(dealer, parser)
+			val actual = stringPieces.mapIndexed { i, piece ->
+				subject.parseLine(CharBuffer.wrap(piece), parser, i == stringPieces.lastIndex)
 			}
 
-			val expected = stringPieces.joinToString("")
-				.let(IPv4Address::parseInt)
-				.let(IPv4Line::Address)
+			val expectedAddress = IPv4Address.parseInt(stringPieces.joinToString(""))
+			val expected = listOf(null, IPv4Line.Address(expectedAddress))
 			assertEquals(expected, actual)
 		}
 	}
