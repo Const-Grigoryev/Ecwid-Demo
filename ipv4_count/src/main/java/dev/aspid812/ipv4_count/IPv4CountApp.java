@@ -2,7 +2,6 @@ package dev.aspid812.ipv4_count;
 
 import java.io.*;
 
-import dev.aspid812.ipv4_count.IPv4Count.ControlFlag;
 import dev.aspid812.ipv4_count.IPv4Count.ErrorHandler;
 
 
@@ -15,7 +14,6 @@ public class IPv4CountApp {
 		public static ErrorHandler reportAndProceed(PrintStream logger) {
 			return error -> {
 				logger.println(error);
-				return ControlFlag.PROCEED;
 			};
 		}
 	}

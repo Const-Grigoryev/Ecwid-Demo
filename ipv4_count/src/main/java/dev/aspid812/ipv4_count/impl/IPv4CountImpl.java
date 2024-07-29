@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.OptionalLong;
 
-import dev.aspid812.ipv4_count.IPv4Count.ControlFlag;
+import dev.aspid812.ipv4_count.IPv4Count.FailureException;
 import dev.aspid812.ipv4_count.IPv4Count.ErrorHandler;
 import dev.aspid812.ipv4_count.impl.MutableIPv4Line.LineToken;
 
@@ -12,7 +12,7 @@ import dev.aspid812.ipv4_count.impl.MutableIPv4Line.LineToken;
 public interface IPv4CountImpl {
 
 	OptionalLong uniqueAddresses();
-	ControlFlag account(LightweightReader input, ErrorHandler errorHandler) throws IOException;
+	void account(LightweightReader input, ErrorHandler errorHandler) throws IOException;
 
 	static IPv4CountImpl forHealthyState() {
 		return new DefaultIPv4CountImpl();
@@ -37,10 +37,9 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 
 	@Override
 	//TODO: Adjust the signature, since this method is not `Lightweight`-specific anymore
-	public ControlFlag account(LightweightReader input, ErrorHandler errorHandler) throws IOException {
+	public void account(LightweightReader input, ErrorHandler errorHandler) throws IOException {
 		var line = new MutableIPv4Line();
-		var flag = ControlFlag.go();
-		while (flag.allowsProceeding()) {
+		while (true) {
 			var lineToken = (LineToken) null;
 			try {
 				lineToken = line.parseLine(input);
@@ -51,21 +50,17 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 			if (lineToken == null)
 				break;
 
-			flag = switch (lineToken) {
+			switch (lineToken) {
 				case VALID_ADDRESS:
 					var address = line.getAddress();
 					addressSet.witness(Integer.toUnsignedLong(address));
-					yield flag;
+					break;
 
 				case IRRELEVANT_CONTENT:
-					yield errorHandler.onError(line.getErrorMessage());
-
-				case NOTHING:
-					yield flag;
-			};
+					errorHandler.onError(line.getErrorMessage());
+					break;
+			}
 		}
-
-		return flag;
 	}
 }
 
@@ -79,7 +74,5 @@ enum DummyIPv4CountImpl implements IPv4CountImpl {
 	}
 
 	@Override
-	public ControlFlag account(LightweightReader input, ErrorHandler errorHandler) {
-		return ControlFlag.FAIL;
-	}
+	public void account(LightweightReader input, ErrorHandler errorHandler) {}
 }

@@ -9,22 +9,20 @@ import dev.aspid812.ipv4_count.impl.*;
 
 public class IPv4Count {
 
-	public enum ControlFlag {
-		FAIL,
-		PROCEED;
-
-		public static ControlFlag go() {
-			return PROCEED;
-		}
-
-		public boolean allowsProceeding() {
-			return this != FAIL;
+	public static class FailureException extends IOException {
+		public FailureException(String message) {
+			super(message);
 		}
 	}
 
 	@FunctionalInterface
 	public interface ErrorHandler {
-		ControlFlag onError(String error);
+
+		// Inheritors may throw this instance of the exception from within `onError` method to signal about a user's
+		// decision to terminate the counting process entirely.
+		FailureException FAILURE = new FailureException("Aborted due to invalid input data");
+
+		void onError(String error) throws FailureException;
 	}
 
 	final ErrorHandler errorHandler;
@@ -33,13 +31,6 @@ public class IPv4Count {
 
 	public IPv4Count(ErrorHandler errorHandler) {
 		this.errorHandler = errorHandler;
-	}
-
-	private IPv4CountImpl switchImplementor(ControlFlag flag) {
-		return switch (flag) {
-			case FAIL -> IPv4CountImpl.forFailedState();
-			default -> implementor;
-		};
 	}
 
 	public OptionalLong uniqueAddresses() {
@@ -51,12 +42,13 @@ public class IPv4Count {
 	}
 
 	public void account(LightweightReader input) throws IOException {
-		var flag = ControlFlag.FAIL;
 		try {
-			flag = implementor.account(input, errorHandler);
+			implementor.account(input, errorHandler);
 		}
-		finally {
-			implementor = switchImplementor(flag);
+		catch (Exception ex) {
+			implementor = IPv4CountImpl.forFailedState();
+			if (!(ex instanceof FailureException))
+				throw ex;
 		}
 	}
 }
