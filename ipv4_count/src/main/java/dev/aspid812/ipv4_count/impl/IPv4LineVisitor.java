@@ -111,7 +111,7 @@ public interface IPv4LineVisitor<R> {
 
 			case CLOSED_OCTET:
 				if (octets == 0)
-					yield nothing();
+					yield eol ? nothing() : null;
 
 			default:
 				error = "Malformed address (too short)";

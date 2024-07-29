@@ -36,10 +36,11 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 	}
 
 	@Override
+	//TODO: Adjust the signature, since this method is not `Lightweight`-specific anymore
 	public ControlFlag account(LightweightReader input, ErrorHandler errorHandler) throws IOException {
 		var line = new MutableIPv4Line();
 		var flag = ControlFlag.go();
-		while (flag.allowsProceeding() && !input.eof()) {
+		while (flag.allowsProceeding()) {
 			var lineToken = (LineToken) null;
 			try {
 				lineToken = line.parseLine(input);
@@ -47,6 +48,9 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 			catch (UncheckedIOException ex) {
 				throw ex.getCause();
 			}
+			if (lineToken == null)
+				break;
+
 			flag = switch (lineToken) {
 				case VALID_ADDRESS:
 					var address = line.getAddress();

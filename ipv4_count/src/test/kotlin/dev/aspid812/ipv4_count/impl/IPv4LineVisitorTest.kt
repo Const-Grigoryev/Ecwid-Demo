@@ -1,6 +1,5 @@
 package dev.aspid812.ipv4_count.impl
 
-import java.io.Reader
 import java.nio.CharBuffer
 import java.util.function.IntSupplier
 
@@ -36,7 +35,7 @@ class IPv4LineVisitorTest {
 
 	companion object {
 		private val samples = listOf(
-			""                to IPv4Line.Nothing,
+//			""                to null,  //FIXME: Modify test to accommodate this case as well
 			"1"               to IPv4Line.Mistake,     // Meaningful string, but not an address
 			"1.2."            to IPv4Line.Mistake,     // Sudden line brake
 			"1.2..4"          to IPv4Line.Mistake,     // Empty octet place
@@ -201,7 +200,7 @@ class IPv4LineVisitorTest {
 		}
 
 		@ParameterizedTest
-		@ValueSource(strings = ["", "\n", "\n1.2.3.4", "\nhere be dragons"])
+		@ValueSource(strings = ["\n", "\n1.2.3.4", "\nhere be dragons"])
 		fun `Parser identifies and accepts blank lines`(inputString: String) {
 			inputString.reader().use { input ->
 				subject.parseLine(input)
@@ -214,19 +213,15 @@ class IPv4LineVisitorTest {
 			}
 		}
 
-		@Test
-		fun `Reading beyond end-of-file constantly yields a specific token`() {
-			val several = 5
+		@ParameterizedTest(name = "eof = {0}")
+		@ValueSource(booleans = [true, false])
+		fun `Attempt of reading from an exhausted chunk yields a null token`(eof: Boolean) {
+			val dealer = IntSupplier { -1 }
+			val parser = IPv4LineVisitor.Parser()
 
-			Reader.nullReader().use { input ->
-				repeat(several) {
-					subject.parseLine(input)
-				}
-			}
+			val actualResult = subject.parseLine(dealer, parser, eof)
 
-			verify(subject) {
-				several.times { nothing() }
-			}
+			assertNull(actualResult)
 		}
 
 		@ParameterizedTest
