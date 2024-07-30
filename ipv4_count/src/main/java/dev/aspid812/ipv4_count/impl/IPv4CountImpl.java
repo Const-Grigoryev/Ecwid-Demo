@@ -2,6 +2,7 @@ package dev.aspid812.ipv4_count.impl;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.CharBuffer;
 import java.util.OptionalLong;
 
 import dev.aspid812.ipv4_count.IPv4Count.FailureException;
@@ -12,7 +13,7 @@ import dev.aspid812.ipv4_count.impl.MutableIPv4Line.LineToken;
 public interface IPv4CountImpl {
 
 	OptionalLong uniqueAddresses();
-	void account(LightweightReader input, ErrorHandler errorHandler) throws IOException;
+	void account(Readable input, ErrorHandler errorHandler) throws IOException;
 
 	static IPv4CountImpl forHealthyState() {
 		return new DefaultIPv4CountImpl();
@@ -35,18 +36,15 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 		return OptionalLong.of(addressSet.count());
 	}
 
-	@Override
-	//TODO: Adjust the signature, since this method is not `Lightweight`-specific anymore
-	public void account(LightweightReader input, ErrorHandler errorHandler) throws IOException {
+	@FunctionalInterface
+	private interface ParsingRoutine {
+		LineToken parseLine(IPv4LineVisitor<? extends LineToken> visitor);
+	}
+
+	private void account(ParsingRoutine routine, ErrorHandler errorHandler) throws FailureException {
 		var line = new MutableIPv4Line();
 		while (true) {
-			var lineToken = (LineToken) null;
-			try {
-				lineToken = line.parseLine(input);
-			}
-			catch (UncheckedIOException ex) {
-				throw ex.getCause();
-			}
+			var lineToken = routine.parseLine(line);
 			if (lineToken == null)
 				break;
 
@@ -62,6 +60,19 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 			}
 		}
 	}
+
+	@Override
+	public void account(Readable input, ErrorHandler errorHandler) throws IOException {
+		var parser = new IPv4LineVisitor.Parser();
+		var buffer = CharBuffer.allocate(8192);
+		do {
+			buffer.clear();
+			var eof = input.read(buffer) == -1;
+
+			buffer.flip();
+			account((ParsingRoutine) v -> v.parseLine(buffer, parser, eof), errorHandler);
+		} while (buffer.limit() > 0);
+	}
 }
 
 
@@ -74,5 +85,5 @@ enum DummyIPv4CountImpl implements IPv4CountImpl {
 	}
 
 	@Override
-	public void account(LightweightReader input, ErrorHandler errorHandler) {}
+	public void account(Readable input, ErrorHandler errorHandler) {}
 }
