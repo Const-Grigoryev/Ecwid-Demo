@@ -1,5 +1,6 @@
 package dev.aspid812.ipv4_count.impl;
 
+import javax.swing.text.html.parser.Parser;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
@@ -10,8 +11,6 @@ import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTETS_PER_ADDRESS;
 import static dev.aspid812.ipv4_count.impl.IPv4Address.BITS_PER_OCTET;
 import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTET_MASK;
 
-import dev.aspid812.ipv4_count.impl.IPv4LineVisitor.Parser.State;
-
 
 public interface IPv4LineVisitor<R> {
 
@@ -19,41 +18,61 @@ public interface IPv4LineVisitor<R> {
 	R mistake(String message);
 	R nothing();
 
+	default R parseLine(Reader input) {
+		var parser = new IPv4LineParser();
+		var dealer = (IntSupplier) () -> {
+			try {
+				return input.read();
+			}
+			catch (IOException ex) {
+				throw new UncheckedIOException(ex);
+			}
+		};
+
+		parser.parseLine(dealer);
+		return parser.visitLine(this);
+	}
+}
+
+
+final class IPv4LineParser {
+
 	private static boolean delimiter(int ch) {
 		return ch == '\n';
 	}
 
-	final class Parser {
-		// Automaton's state summarizes a consumed portion (`p`) of the input string.
-		enum State {
-			OPEN_OCTET,     // `p` contains some octets, and the last one isn't complete yet; thus, `p` ends with a digit;
-			CLOSED_OCTET,   // `p` is empty, or contains some octets, each of which is _closed_ by a following dot;
-			NONSENSE        // `p` may not be a prefix of any recognizable substance (valid IP address).
-		}
-
-		private int address = 0x00;
-		private String error = null;
-
-		private int octets = 0;
-		private State state = State.CLOSED_OCTET;
+	// Automaton's state summarizes a consumed portion (`p`) of the input string.
+	private enum State {
+		OPEN_OCTET,     // `p` contains some octets, and the last one isn't complete yet; thus, `p` ends with a digit;
+		CLOSED_OCTET,   // `p` is empty, or contains some octets, each of which is _closed_ by a following dot;
+		NONSENSE        // `p` may not be a prefix of any recognizable substance (valid IP address).
 	}
 
-	default R parseLine(CharBuffer input, Parser parser, boolean eof) {
+	private int address;
+	private String error;
+
+	private int octets;
+	private State state;
+
+	public IPv4LineParser parseLine(CharBuffer input) {
 		var dealer = (IntSupplier) () -> input.hasRemaining() ? input.get() : -1;
-		return parseLine(dealer, parser, eof);
+		parseLine(dealer);
+		return this;
 	}
 
-	default R parseLine(IntSupplier input, Parser parser, boolean eof) {
-		var eol = false;
+	void parseLine(IntSupplier input) {
+		var restore = state != null;
 
 		// Output registers: construction site of a parsing product.
-		var address = parser.address;
-		var error = parser.error;
+		var address = restore ? this.address : 0x00;
+		var error = restore ? this.error : null;
 
 		// Loop over characters of the input string (single line), changing `state` after each. The variable named
 		// `octets` counts closed octets and, strictly speaking, this number is a part of automaton's state too.
-		var octets = parser.octets;
-		var state = parser.state;
+		var octets = restore ? this.octets : 0;
+		var state = restore ? this.state : State.CLOSED_OCTET;
+
+		var eol = false;
 		while (true) {
 			// **Assertion 1 (loop invariant):** regardless of the state, `0 <= octets && octets < OCTETS_PER_ADDRESS`
 			// both before and after the loop's body.
@@ -104,40 +123,34 @@ public interface IPv4LineVisitor<R> {
 		// It can be thought of as a peculiar special case of a transition function for the EOL character. Thus,
 		// fall-through matters here as before (watch you step!). Finally, depending on the classification result,
 		// send a parsing product to a corresponding visitor/builder function.
-		var result = !(eol || eof) ? null : switch (state) {
-			case OPEN_OCTET:
-				if (++octets == OCTETS_PER_ADDRESS)
-					yield address(address);
-
-			case CLOSED_OCTET:
-				if (octets == 0)
-					yield eol ? nothing() : null;
-
-			default:
+		if (eol) {
+			var accepting = switch (state) {
+				case OPEN_OCTET   -> ++octets == OCTETS_PER_ADDRESS;  // Valid address
+				case CLOSED_OCTET -> octets == 0;                     // Empty line
+				case NONSENSE     -> error != null;                   // Bad line, but it's OK to "accept" it whenever the error is already checked
+			};
+			if (!accepting) {
 				error = "Malformed address (too short)";
-
-			case NONSENSE:
-				yield mistake(error);
-		};
+			}
+			state = null;
+		}
 
 		// Store the final state for a future use
-		parser.address = address;
-		parser.error = error;
-		parser.octets = octets;
-		parser.state = state;
-		return result;
+		this.address = address;
+		this.error = error;
+		this.octets = octets;
+		this.state = state;
 	}
 
-	default R parseLine(Reader input) {
-		var dealer = (IntSupplier) () -> {
-			try {
-				return input.read();
-			}
-			catch (IOException ex) {
-				throw new UncheckedIOException(ex);
-			}
-		};
-
-		return parseLine(dealer, new Parser(), true);
+	public <R> R visitLine(IPv4LineVisitor<R> visitor) {
+		if (state != null)
+			return null;
+		if (error != null)
+			return visitor.mistake(error);
+		if (octets == OCTETS_PER_ADDRESS)
+			return visitor.address(address);
+		if (octets == 0)
+			return visitor.nothing();
+		throw new IllegalStateException("octets = " + octets);
 	}
 }

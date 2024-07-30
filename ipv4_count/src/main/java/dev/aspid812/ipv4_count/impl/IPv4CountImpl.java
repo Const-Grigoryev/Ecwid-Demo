@@ -63,15 +63,16 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 
 	@Override
 	public void account(Readable input, ErrorHandler errorHandler) throws IOException {
-		var parser = new IPv4LineVisitor.Parser();
+		var parser = new IPv4LineParser();
 		var buffer = CharBuffer.allocate(8192);
-		do {
+		var eof = false;
+		while (!eof) {
 			buffer.clear();
-			var eof = input.read(buffer) == -1;
+			eof = input.read(buffer) == -1;
 
-			buffer.flip();
-			account((ParsingRoutine) v -> v.parseLine(buffer, parser, eof), errorHandler);
-		} while (buffer.limit() > 0);
+			buffer.put(eof ? "\n" : "").flip();
+			account((ParsingRoutine) v -> parser.parseLine(buffer).visitLine(v), errorHandler);
+		}
 	}
 }
 

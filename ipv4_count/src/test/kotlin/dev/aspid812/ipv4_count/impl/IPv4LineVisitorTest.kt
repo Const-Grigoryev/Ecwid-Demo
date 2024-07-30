@@ -89,12 +89,14 @@ class IPv4LineVisitorTest {
 		@Test
 		fun `Input string may be read by pieces`() {
 			val stringPieces = "3.14.\t159.26".split("\t")
-			val parser = IPv4LineVisitor.Parser()
+			val parser = IPv4LineParser()
 			subject = IPv4Line.Factory
 
-			val actual = stringPieces.mapIndexed { i, piece ->
-				subject.parseLine(CharBuffer.wrap(piece), parser, i == stringPieces.lastIndex)
-			}
+			val actualResults = listOf(
+				parser.parseLine(CharBuffer.wrap(stringPieces[0])).visitLine(subject),
+				parser.parseLine(CharBuffer.wrap(stringPieces[1])).visitLine(subject),
+				parser.parseLine(CharBuffer.wrap("\n")).visitLine(subject),
+			)
 
 			val expectedAddress = IPv4Address.parseInt(stringPieces.joinToString(""))
 			val expected = listOf(null, IPv4Line.Address(expectedAddress))
@@ -216,12 +218,18 @@ class IPv4LineVisitorTest {
 		@ParameterizedTest(name = "eof = {0}")
 		@ValueSource(booleans = [true, false])
 		fun `Attempt of reading from an exhausted chunk yields a null token`(eof: Boolean) {
+			val several = 5
 			val dealer = IntSupplier { -1 }
-			val parser = IPv4LineVisitor.Parser()
+			val parser = IPv4LineParser()
 
-			val actualResult = subject.parseLine(dealer, parser, eof)
+			val actualResults = List(several) {
+				parser
+					.apply { parseLine(dealer) }
+					.visitLine(subject)
+			}
 
-			assertNull(actualResult)
+			val expectedResults = List(several) { null }
+			assertEquals(expectedResults, actualResults)
 		}
 
 		@ParameterizedTest
