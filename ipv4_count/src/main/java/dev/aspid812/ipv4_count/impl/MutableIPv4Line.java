@@ -1,7 +1,7 @@
 package dev.aspid812.ipv4_count.impl;
 
 
-public final class MutableIPv4Line implements IPv4LineVisitor<MutableIPv4Line.LineToken> {
+public final class MutableIPv4Line implements IPv4LineParser.Visitor<MutableIPv4Line.LineToken> {
 
 	public enum LineToken {
 		VALID_ADDRESS,

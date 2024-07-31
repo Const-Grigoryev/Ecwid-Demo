@@ -1,9 +1,5 @@
 package dev.aspid812.ipv4_count.impl;
 
-import javax.swing.text.html.parser.Parser;
-import java.io.IOException;
-import java.io.Reader;
-import java.io.UncheckedIOException;
 import java.nio.CharBuffer;
 import java.util.function.IntSupplier;
 
@@ -12,30 +8,14 @@ import static dev.aspid812.ipv4_count.impl.IPv4Address.BITS_PER_OCTET;
 import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTET_MASK;
 
 
-public interface IPv4LineVisitor<R> {
+//TODO: Fix up comments
+public final class IPv4LineParser {
 
-	R address(int address);
-	R mistake(String message);
-	R nothing();
-
-	default R parseLine(Reader input) {
-		var parser = new IPv4LineParser();
-		var dealer = (IntSupplier) () -> {
-			try {
-				return input.read();
-			}
-			catch (IOException ex) {
-				throw new UncheckedIOException(ex);
-			}
-		};
-
-		parser.parseLine(dealer);
-		return parser.visitLine(this);
+	public interface Visitor<R> {
+		R address(int address);
+		R mistake(String message);
+		R nothing();
 	}
-}
-
-
-final class IPv4LineParser {
 
 	private static boolean delimiter(int ch) {
 		return ch == '\n';
@@ -142,7 +122,7 @@ final class IPv4LineParser {
 		this.state = state;
 	}
 
-	public <R> R visitLine(IPv4LineVisitor<R> visitor) {
+	public <R> R visitLine(Visitor<R> visitor) {
 		if (state != null)
 			return null;
 		if (error != null)

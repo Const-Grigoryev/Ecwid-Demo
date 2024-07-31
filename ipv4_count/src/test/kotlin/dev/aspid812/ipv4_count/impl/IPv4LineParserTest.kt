@@ -1,7 +1,6 @@
 package dev.aspid812.ipv4_count.impl
 
 import java.nio.CharBuffer
-import java.util.function.IntSupplier
 
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
@@ -9,17 +8,15 @@ import org.junit.jupiter.params.provider.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.mockito.kotlin.*
 
-import dev.aspid812.ipv4_count.util.reader
 
-
-class IPv4LineVisitorTest {
+class IPv4LineParserTest {
 
 	sealed interface IPv4Line {
 		data class Address(val address: Int) : IPv4Line
 		data object Mistake: IPv4Line
 		data object Nothing: IPv4Line
 
-		companion object Factory : IPv4LineVisitor<IPv4Line> {
+		companion object Factory : IPv4LineParser.Visitor<IPv4Line> {
 			override fun address(address: Int) = Address(address)
 			override fun mistake(message: String) = Mistake     // Drop `message` for the sake of simple compare
 			override fun nothing() = Nothing
@@ -35,7 +32,7 @@ class IPv4LineVisitorTest {
 
 	companion object {
 		private val samples = listOf(
-//			""                to null,  //FIXME: Modify test to accommodate this case as well
+			""                to IPv4Line.Nothing,
 			"1"               to IPv4Line.Mistake,     // Meaningful string, but not an address
 			"1.2."            to IPv4Line.Mistake,     // Sudden line brake
 			"1.2..4"          to IPv4Line.Mistake,     // Empty octet place
@@ -48,59 +45,59 @@ class IPv4LineVisitorTest {
 		)
 
 		@JvmStatic  // Still waiting for a more general solution...
-		fun inputLines() = samples.map { Arguments.of(it.first, it.second) }
+		fun inputLines() = samples.map { Arguments.of(it.first + "\n", it.second) }
 	}
 
-	lateinit var subject: IPv4LineVisitor<*>
+	lateinit var subject: IPv4LineParser
+
+	@BeforeEach
+	fun setup() {
+		subject = IPv4LineParser()
+	}
 
 	@Nested
 	@DisplayName("API features")
 	inner class ApiFeatures {
 
 		@ParameterizedTest
-		@MethodSource("dev.aspid812.ipv4_count.impl.IPv4LineVisitorTest#inputLines")
-		fun `parseLine() returns the same object as its delegate`(addressString: String) {
+		@MethodSource("dev.aspid812.ipv4_count.impl.IPv4LineParserTest#inputLines")
+		fun `visitLine() returns the same object as visitor`(line: String) {
 			val cannedResult = Any()
-			subject = spy {
+			val visitor = mock<IPv4LineParser.Visitor<*>> {
 				on { address(any()) } doReturn cannedResult
 				on { mistake(any()) } doReturn cannedResult
 				on { nothing() }      doReturn cannedResult
 			}
 
-			val actualResult = addressString.reader().use { input ->
-				subject.parseLine(input)
-			}
+			val actualResult = subject.parseLine(CharBuffer.wrap(line)).visitLine(visitor)
 
 			assertSame(cannedResult, actualResult)
 		}
 
 		@ParameterizedTest
-		@MethodSource("dev.aspid812.ipv4_count.impl.IPv4LineVisitorTest#inputLines")
-		fun `Factory can implement a Visitor interface as well`(addressString: String, expectedResult: Any) {
-			subject = IPv4Line.Factory
+		@MethodSource("dev.aspid812.ipv4_count.impl.IPv4LineParserTest#inputLines")
+		fun `Factory can implement a Visitor interface as well`(line: String, expectedResult: Any) {
+			val lineBuffer = CharBuffer.wrap(line)
 
-			val actualResult = addressString.reader().use { input ->
-				subject.parseLine(input)
-			}
+			val actualResult = subject.parseLine(lineBuffer).visitLine(IPv4Line.Factory)
 
 			assertEquals(expectedResult, actualResult)
 		}
 
 		@Test
+		//TODO: More test examples
 		fun `Input string may be read by pieces`() {
 			val stringPieces = "3.14.\t159.26".split("\t")
-			val parser = IPv4LineParser()
-			subject = IPv4Line.Factory
 
 			val actualResults = listOf(
-				parser.parseLine(CharBuffer.wrap(stringPieces[0])).visitLine(subject),
-				parser.parseLine(CharBuffer.wrap(stringPieces[1])).visitLine(subject),
-				parser.parseLine(CharBuffer.wrap("\n")).visitLine(subject),
+				subject.parseLine(CharBuffer.wrap(stringPieces[0])).visitLine(IPv4Line.Factory),
+				subject.parseLine(CharBuffer.wrap(stringPieces[1])).visitLine(IPv4Line.Factory),
+				subject.parseLine(CharBuffer.wrap("\n")).visitLine(IPv4Line.Factory),
 			)
 
 			val expectedAddress = IPv4Address.parseInt(stringPieces.joinToString(""))
-			val expected = listOf(null, IPv4Line.Address(expectedAddress))
-			assertEquals(expected, actual)
+			val expectedResults = listOf(null, null, IPv4Line.Address(expectedAddress))
+			assertEquals(expectedResults, actualResults)
 		}
 	}
 
@@ -108,9 +105,11 @@ class IPv4LineVisitorTest {
 	@DisplayName("IPv4 syntax support")
 	inner class IPv4Syntax {
 
+		lateinit var visitor: IPv4LineParser.Visitor<*>
+
 		@BeforeEach
 		fun setup() {
-			subject = spy()
+			visitor = mock()
 		}
 
 		// „Три есть цифирь, до коей счесть потребно, и сочтенья твои суть три. До четырёх счесть не моги,
@@ -118,11 +117,11 @@ class IPv4LineVisitorTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["1", "1.2.3", "1.2.3.4.5"])
 		fun `IPv4 address consist of exactly four octets`(addressString: String) {
-			addressString.reader().use { input ->
-				subject.parseLine(input)
-			}
+			val buffer = CharBuffer.wrap("$addressString\n")
 
-			verify(subject) {
+			subject.parseLine(buffer).visitLine(visitor)
+
+			verify(visitor) {
 				1.times { mistake(any()) }
 				0.times { address(any()) }
 				0.times { nothing() }
@@ -132,11 +131,11 @@ class IPv4LineVisitorTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["256.2.3.4", "1.256.3.4", "1.2.3.256"])
 		fun `Octet is a non-negative integer not greater then 255`(addressString: String) {
-			addressString.reader().use { input ->
-				subject.parseLine(input)
-			}
+			val buffer = CharBuffer.wrap("$addressString\n")
 
-			verify(subject) {
+			subject.parseLine(buffer).visitLine(visitor)
+
+			verify(visitor) {
 				1.times { mistake(any()) }
 				0.times { address(any()) }
 				0.times { nothing() }
@@ -146,13 +145,13 @@ class IPv4LineVisitorTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["00.01.02.03", "000.001.002.003", "0000.0001.0002.0003"])
 		fun `Octet may start with one or more zeros`(addressString: String) {
-			addressString.reader().use { input ->
-				subject.parseLine(input)
-			}
+			val buffer = CharBuffer.wrap("$addressString\n")
+
+			subject.parseLine(buffer).visitLine(visitor)
 
 			val expectedAddress = IPv4Address.parseInt(addressString)
 			val actualAddress = argumentCaptor<Int>()
-			verify(subject) {
+			verify(visitor) {
 				1.times { address(actualAddress.capture()) }
 				0.times { mistake(any()) }
 				0.times { nothing() }
@@ -163,11 +162,11 @@ class IPv4LineVisitorTest {
 		@ParameterizedTest
 		@ValueSource(strings = [".2.3.4", ".1.2.3.4", "1..3.4", "1.2.3.", "1.2.3.4."])
 		fun `Empty octets are not allowed`(addressString: String) {
-			addressString.reader().use { input ->
-				subject.parseLine(input)
-			}
+			val buffer = CharBuffer.wrap("$addressString\n")
 
-			verify(subject) {
+			subject.parseLine(buffer).visitLine(visitor)
+
+			verify(visitor) {
 				1.times { mistake(any()) }
 				0.times { address(any()) }
 				0.times { nothing() }
@@ -177,13 +176,13 @@ class IPv4LineVisitorTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["3.14.159.26", "0.0.0.0", "1.2.3.4", "255.255.255.255"])
 		fun `Examples of a well-formed IPv4 address`(addressString: String) {
-			addressString.reader().use { input ->
-				subject.parseLine(input)
-			}
+			val buffer = CharBuffer.wrap("$addressString\n")
+
+			subject.parseLine(buffer).visitLine(visitor)
 
 			val expectedAddress = IPv4Address.parseInt(addressString)
 			val actualAddress = argumentCaptor<Int>()
-			verify(subject) {
+			verify(visitor) {
 				1.times { address(actualAddress.capture()) }
 				0.times { mistake(any()) }
 				0.times { nothing() }
@@ -196,19 +195,15 @@ class IPv4LineVisitorTest {
 	@DisplayName("Multi-line input handling")
 	inner class MultiLineInput {
 
-		@BeforeEach
-		fun setup() {
-			subject = spy()
-		}
-
 		@ParameterizedTest
 		@ValueSource(strings = ["\n", "\n1.2.3.4", "\nhere be dragons"])
 		fun `Parser identifies and accepts blank lines`(inputString: String) {
-			inputString.reader().use { input ->
-				subject.parseLine(input)
-			}
+			val visitor = mock<IPv4LineParser.Visitor<*>>()
+			val buffer = CharBuffer.wrap(inputString)
 
-			verify(subject) {
+			subject.parseLine(buffer).visitLine(visitor)
+
+			verify(visitor) {
 				1.times { nothing() }
 				0.times { address(any()) }
 				0.times { mistake(any()) }
@@ -219,13 +214,11 @@ class IPv4LineVisitorTest {
 		@ValueSource(booleans = [true, false])
 		fun `Attempt of reading from an exhausted chunk yields a null token`(eof: Boolean) {
 			val several = 5
-			val dealer = IntSupplier { -1 }
-			val parser = IPv4LineParser()
+			val visitor = mock<IPv4LineParser.Visitor<*>>(defaultAnswer = { fail("Entered the wrong door") })
+			val buffer = CharBuffer.allocate(0);
 
 			val actualResults = List(several) {
-				parser
-					.apply { parseLine(dealer) }
-					.visitLine(subject)
+				subject.parseLine(buffer).visitLine(visitor)
 			}
 
 			val expectedResults = List(several) { null }
@@ -235,15 +228,15 @@ class IPv4LineVisitorTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["", "1", "1.2.", "1.2.3.4", "1.2.3.4.", "1.2.3.4.5", "999.0.0.0", "some other stuff"])
 		fun `parseLine() consumes a single line regardless of its content`(firstLine: String) {
-			fun inputIterator() = iterator {
-				yieldAll(firstLine.iterator())
-				yield('\n')
-				fail("The parser went too far")
-			}
+			val buffer = CharBuffer.allocate(128)
+				.put(firstLine)
+				.put('\n')
+				.put("No one must look here")
+				.flip()
 
-			inputIterator().reader().use { input ->
-				subject.parseLine(input)
-			}
+			subject.parseLine(buffer)
+
+			assertEquals(firstLine.length + 1, buffer.position())
 		}
 	}
 }

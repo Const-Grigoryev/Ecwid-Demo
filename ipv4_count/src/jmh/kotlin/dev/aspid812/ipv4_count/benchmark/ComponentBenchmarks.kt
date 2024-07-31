@@ -4,6 +4,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.LineNumberReader
 import java.io.Reader
+import java.nio.Buffer
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.IntBuffer
@@ -107,30 +108,36 @@ open class BC03_Parser : InternalDatasetFeaturedBenchmark {
 	@Param("")
 	override lateinit var dataset: String
 
-	lateinit var dataReader: Reader
-	lateinit var mutableLine: MutableIPv4Line
+	lateinit var dataKeeper: BufferKeeper<CharBuffer>
+	lateinit var lineParser: IPv4LineParser
+
+	val line = MutableIPv4Line()
 
 	@Setup(Level.Iteration)
 	fun setup() {
 		val data = loadDataset().decodeToString().toCharArray()
-		dataReader = CharBufferReader(
+		dataKeeper = BufferKeeper(
 			create = { CharBuffer.wrap(data).asReadOnlyBuffer() },
 			refill = { it.rewind() }
 		)
-		mutableLine = MutableIPv4Line()
+		lineParser = IPv4LineParser()
 	}
 
 	@Benchmark
 	fun v0() {
-		do {
-			val ch = dataReader.read()
-		} while (ch != -1 && ch != NEWLINE)
+		val buffer = checkNotNull(dataKeeper.get())
+		while (buffer.hasRemaining()) {
+			val ch = buffer.get()
+			if (ch == '\n')
+				break
+		}
 	}
 
 	@Benchmark
-	fun v1_mutableLine(blackhole: Blackhole) {
-		blackhole.consume(mutableLine.parseLine(dataReader))
-		blackhole.consume(mutableLine.address)
+	fun v1_mutableLine(): Int {
+		val buffer = checkNotNull(dataKeeper.get())
+		lineParser.parseLine(buffer).visitLine(line)
+		return line.address
 	}
 }
 

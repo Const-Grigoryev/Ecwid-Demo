@@ -1,7 +1,6 @@
 package dev.aspid812.ipv4_count.impl;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.CharBuffer;
 import java.util.OptionalLong;
 
@@ -38,7 +37,7 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 
 	@FunctionalInterface
 	private interface ParsingRoutine {
-		LineToken parseLine(IPv4LineVisitor<? extends LineToken> visitor);
+		LineToken parseLine(IPv4LineParser.Visitor<? extends LineToken> visitor);
 	}
 
 	private void account(ParsingRoutine routine, ErrorHandler errorHandler) throws FailureException {
