@@ -3,8 +3,6 @@ package dev.aspid812.ipv4_count.benchmark
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.LineNumberReader
-import java.io.Reader
-import java.nio.Buffer
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.IntBuffer
@@ -18,7 +16,6 @@ import dev.aspid812.ipv4_count.IPv4Count
 import dev.aspid812.ipv4_count.benchmark.InternalDatasetFeaturedBenchmark.Companion.NEWLINE
 import dev.aspid812.ipv4_count.benchmark.util.BufferKeeper
 import dev.aspid812.ipv4_count.benchmark.util.ByteBufferInputStream
-import dev.aspid812.ipv4_count.benchmark.util.CharBufferReader
 import dev.aspid812.ipv4_count.impl.*
 
 
@@ -111,8 +108,6 @@ open class BC03_Parser : InternalDatasetFeaturedBenchmark {
 	lateinit var dataKeeper: BufferKeeper<CharBuffer>
 	lateinit var lineParser: IPv4LineParser
 
-	val line = MutableIPv4Line()
-
 	@Setup(Level.Iteration)
 	fun setup() {
 		val data = loadDataset().decodeToString().toCharArray()
@@ -134,10 +129,10 @@ open class BC03_Parser : InternalDatasetFeaturedBenchmark {
 	}
 
 	@Benchmark
-	fun v1_mutableLine(): Int {
+	fun v1_parser(): Int {
 		val buffer = checkNotNull(dataKeeper.get())
-		lineParser.parseLine(buffer).visitLine(line)
-		return line.address
+		val token = lineParser.parseLine(buffer, IPv4LineClassifier.INSTANCE)
+		return if (token == IPv4LineClassifier.LineToken.VALID_ADDRESS) lineParser.address else 0xBADF00D
 	}
 }
 

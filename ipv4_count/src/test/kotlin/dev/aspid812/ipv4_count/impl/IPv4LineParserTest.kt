@@ -69,7 +69,7 @@ class IPv4LineParserTest {
 				on { nothing() }      doReturn cannedResult
 			}
 
-			val actualResult = subject.parseLine(CharBuffer.wrap(line)).visitLine(visitor)
+			val actualResult = subject.parseLine(CharBuffer.wrap(line), visitor)
 
 			assertSame(cannedResult, actualResult)
 		}
@@ -79,7 +79,7 @@ class IPv4LineParserTest {
 		fun `Factory can implement a Visitor interface as well`(line: String, expectedResult: Any) {
 			val lineBuffer = CharBuffer.wrap(line)
 
-			val actualResult = subject.parseLine(lineBuffer).visitLine(IPv4Line.Factory)
+			val actualResult = subject.parseLine(lineBuffer, IPv4Line.Factory)
 
 			assertEquals(expectedResult, actualResult)
 		}
@@ -90,9 +90,9 @@ class IPv4LineParserTest {
 			val stringPieces = "3.14.\t159.26".split("\t")
 
 			val actualResults = listOf(
-				subject.parseLine(CharBuffer.wrap(stringPieces[0])).visitLine(IPv4Line.Factory),
-				subject.parseLine(CharBuffer.wrap(stringPieces[1])).visitLine(IPv4Line.Factory),
-				subject.parseLine(CharBuffer.wrap("\n")).visitLine(IPv4Line.Factory),
+				subject.parseLine(CharBuffer.wrap(stringPieces[0]), IPv4Line.Factory),
+				subject.parseLine(CharBuffer.wrap(stringPieces[1]), IPv4Line.Factory),
+				subject.parseLine(CharBuffer.wrap("\n"), IPv4Line.Factory),
 			)
 
 			val expectedAddress = IPv4Address.parseInt(stringPieces.joinToString(""))
@@ -119,7 +119,7 @@ class IPv4LineParserTest {
 		fun `IPv4 address consist of exactly four octets`(addressString: String) {
 			val buffer = CharBuffer.wrap("$addressString\n")
 
-			subject.parseLine(buffer).visitLine(visitor)
+			subject.parseLine(buffer, visitor)
 
 			verify(visitor) {
 				1.times { mistake(any()) }
@@ -133,7 +133,7 @@ class IPv4LineParserTest {
 		fun `Octet is a non-negative integer not greater then 255`(addressString: String) {
 			val buffer = CharBuffer.wrap("$addressString\n")
 
-			subject.parseLine(buffer).visitLine(visitor)
+			subject.parseLine(buffer, visitor)
 
 			verify(visitor) {
 				1.times { mistake(any()) }
@@ -147,7 +147,7 @@ class IPv4LineParserTest {
 		fun `Octet may start with one or more zeros`(addressString: String) {
 			val buffer = CharBuffer.wrap("$addressString\n")
 
-			subject.parseLine(buffer).visitLine(visitor)
+			subject.parseLine(buffer, visitor)
 
 			val expectedAddress = IPv4Address.parseInt(addressString)
 			val actualAddress = argumentCaptor<Int>()
@@ -164,7 +164,7 @@ class IPv4LineParserTest {
 		fun `Empty octets are not allowed`(addressString: String) {
 			val buffer = CharBuffer.wrap("$addressString\n")
 
-			subject.parseLine(buffer).visitLine(visitor)
+			subject.parseLine(buffer, visitor)
 
 			verify(visitor) {
 				1.times { mistake(any()) }
@@ -178,7 +178,7 @@ class IPv4LineParserTest {
 		fun `Examples of a well-formed IPv4 address`(addressString: String) {
 			val buffer = CharBuffer.wrap("$addressString\n")
 
-			subject.parseLine(buffer).visitLine(visitor)
+			subject.parseLine(buffer, visitor)
 
 			val expectedAddress = IPv4Address.parseInt(addressString)
 			val actualAddress = argumentCaptor<Int>()
@@ -201,7 +201,7 @@ class IPv4LineParserTest {
 			val visitor = mock<IPv4LineParser.Visitor<*>>()
 			val buffer = CharBuffer.wrap(inputString)
 
-			subject.parseLine(buffer).visitLine(visitor)
+			subject.parseLine(buffer, visitor)
 
 			verify(visitor) {
 				1.times { nothing() }
@@ -218,7 +218,7 @@ class IPv4LineParserTest {
 			val buffer = CharBuffer.allocate(0);
 
 			val actualResults = List(several) {
-				subject.parseLine(buffer).visitLine(visitor)
+				subject.parseLine(buffer, visitor)
 			}
 
 			val expectedResults = List(several) { null }
@@ -234,9 +234,10 @@ class IPv4LineParserTest {
 				.put("No one must look here")
 				.flip()
 
-			subject.parseLine(buffer)
+			val actualPosition = subject.parseLine(buffer)
 
-			assertEquals(firstLine.length + 1, buffer.position())
+			val expectedPosition = firstLine.length + 1
+			assertEquals(expectedPosition, buffer.position())
 		}
 	}
 }

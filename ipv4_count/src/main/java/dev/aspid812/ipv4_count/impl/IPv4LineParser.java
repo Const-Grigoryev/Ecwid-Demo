@@ -34,10 +34,24 @@ public final class IPv4LineParser {
 	private int octets;
 	private State state;
 
-	public IPv4LineParser parseLine(CharBuffer input) {
+	public int getAddress() {
+		return address;
+	}
+
+	public String getErrorMessage() {
+		return error;
+	}
+
+	public int parseLine(CharBuffer input) {
 		var dealer = (IntSupplier) () -> input.hasRemaining() ? input.get() : -1;
 		parseLine(dealer);
-		return this;
+		return input.position();
+	}
+
+	public <R> R parseLine(CharBuffer input, Visitor<R> visitor) {
+		var pos = parseLine(input);
+//		return pos < input.limit() ? visitLine(visitor) : null;
+		return visitLine(visitor);
 	}
 
 	void parseLine(IntSupplier input) {

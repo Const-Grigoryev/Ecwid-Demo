@@ -6,7 +6,6 @@ import java.util.OptionalLong;
 
 import dev.aspid812.ipv4_count.IPv4Count.FailureException;
 import dev.aspid812.ipv4_count.IPv4Count.ErrorHandler;
-import dev.aspid812.ipv4_count.impl.MutableIPv4Line.LineToken;
 
 
 public interface IPv4CountImpl {
@@ -35,26 +34,20 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 		return OptionalLong.of(addressSet.count());
 	}
 
-	@FunctionalInterface
-	private interface ParsingRoutine {
-		LineToken parseLine(IPv4LineParser.Visitor<? extends LineToken> visitor);
-	}
-
-	private void account(ParsingRoutine routine, ErrorHandler errorHandler) throws FailureException {
-		var line = new MutableIPv4Line();
+	private void account(IPv4LineParser parser, CharBuffer buffer, ErrorHandler errorHandler) throws FailureException {
 		while (true) {
-			var lineToken = routine.parseLine(line);
+			var lineToken = parser.parseLine(buffer, IPv4LineClassifier.INSTANCE);
 			if (lineToken == null)
 				break;
 
 			switch (lineToken) {
 				case VALID_ADDRESS:
-					var address = line.getAddress();
+					var address = parser.getAddress();
 					addressSet.witness(Integer.toUnsignedLong(address));
 					break;
 
 				case IRRELEVANT_CONTENT:
-					errorHandler.onError(line.getErrorMessage());
+					errorHandler.onError(parser.getErrorMessage());
 					break;
 			}
 		}
@@ -70,7 +63,7 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 			eof = input.read(buffer) == -1;
 
 			buffer.put(eof ? "\n" : "").flip();
-			account((ParsingRoutine) v -> parser.parseLine(buffer).visitLine(v), errorHandler);
+			account(parser, buffer, errorHandler);
 		}
 	}
 }
