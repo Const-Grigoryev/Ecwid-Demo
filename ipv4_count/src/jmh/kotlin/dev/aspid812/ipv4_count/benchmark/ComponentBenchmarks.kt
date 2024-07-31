@@ -4,9 +4,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.LineNumberReader
 import java.nio.ByteBuffer
-import java.nio.CharBuffer
 import java.nio.IntBuffer
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 import org.openjdk.jmh.annotations.*
@@ -51,7 +49,6 @@ open class BC02_Reader : InternalDatasetFeaturedBenchmark {
 
 	lateinit var dataKeeper: BufferKeeper<ByteBuffer>
 	lateinit var standardReader: LineNumberReader
-	lateinit var lightweightReader: LightweightReader
 
 	@Setup(Level.Iteration)
 	fun setup() {
@@ -64,8 +61,7 @@ open class BC02_Reader : InternalDatasetFeaturedBenchmark {
 			create = { ByteBuffer.wrap(data) },
 			refill = { it.rewind() }
 		)
-		standardReader = LineNumberReader(InputStreamReader(dataStream, StandardCharsets.UTF_8), DEFAULT_BUFFER_SIZE)
-		lightweightReader = LightweightInputStreamReader(dataStream)
+		standardReader = LineNumberReader(InputStreamReader(dataStream, Charsets.UTF_8), DEFAULT_BUFFER_SIZE)
 	}
 
 	@Benchmark
@@ -84,14 +80,6 @@ open class BC02_Reader : InternalDatasetFeaturedBenchmark {
 		} while (ch != -1 && ch != NEWLINE)
 		return standardReader.lineNumber
 	}
-
-	@Benchmark
-	fun v2_lightweight(): Boolean {
-		do {
-			val ch = lightweightReader.read()
-		} while (ch != -1 && ch != NEWLINE)
-		return lightweightReader.eof()
-	}
 }
 
 
@@ -105,14 +93,14 @@ open class BC03_Parser : InternalDatasetFeaturedBenchmark {
 	@Param("")
 	override lateinit var dataset: String
 
-	lateinit var dataKeeper: BufferKeeper<CharBuffer>
+	lateinit var dataKeeper: BufferKeeper<ByteBuffer>
 	lateinit var lineParser: IPv4LineParser
 
 	@Setup(Level.Iteration)
 	fun setup() {
-		val data = loadDataset().decodeToString().toCharArray()
+		val data = loadDataset()
 		dataKeeper = BufferKeeper(
-			create = { CharBuffer.wrap(data).asReadOnlyBuffer() },
+			create = { ByteBuffer.wrap(data).asReadOnlyBuffer() },
 			refill = { it.rewind() }
 		)
 		lineParser = IPv4LineParser()
@@ -122,8 +110,8 @@ open class BC03_Parser : InternalDatasetFeaturedBenchmark {
 	fun v0() {
 		val buffer = checkNotNull(dataKeeper.get())
 		while (buffer.hasRemaining()) {
-			val ch = buffer.get()
-			if (ch == '\n')
+			val ch = buffer.get().toInt()
+			if (ch == NEWLINE)
 				break
 		}
 	}

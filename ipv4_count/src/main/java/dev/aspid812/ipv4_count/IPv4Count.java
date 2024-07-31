@@ -38,10 +38,10 @@ public class IPv4Count {
 	}
 
 	public void account(InputStream input) throws IOException {
-		account(new LightweightInputStreamReader(input));
+		account(Channels.newChannel(input));
 	}
 
-	public void account(LightweightReader input) throws IOException {
+	public void account(ReadableByteChannel input) throws IOException {
 		try {
 			implementor.account(input, errorHandler);
 		}

@@ -1,6 +1,7 @@
 package dev.aspid812.ipv4_count.impl
 
-import java.nio.CharBuffer
+import java.nio.ByteBuffer
+import java.nio.charset.Charset
 
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
@@ -42,6 +43,8 @@ class IPv4LineParserTest {
 		fun inputLines() = samples.map { Arguments.of(it.first + "\n", it.second) }
 	}
 
+	val charset: Charset = Charsets.UTF_8
+
 	lateinit var subject: IPv4LineParser
 
 	@BeforeEach
@@ -59,9 +62,9 @@ class IPv4LineParserTest {
 			val stringPieces = "3.14.\t159.26".split("\t")
 
 			val actualResults = listOf(
-				with(subject) { parseLine(CharBuffer.wrap(stringPieces[0])); ready() },
-				with(subject) { parseLine(CharBuffer.wrap(stringPieces[1])); ready() },
-				with(subject) { parseLine(CharBuffer.wrap("\n")); ready() },
+				with(subject) { parseLine(charset.encode(stringPieces[0])); ready() },
+				with(subject) { parseLine(charset.encode(stringPieces[1])); ready() },
+				with(subject) { parseLine(charset.encode("\n")); ready() },
 			)
 			val expectedResults = listOf(false, false, true)
 			assertEquals(expectedResults, actualResults)
@@ -82,7 +85,7 @@ class IPv4LineParserTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["1", "1.2.3", "1.2.3.4.5"])
 		fun `IPv4 address consist of exactly four octets`(addressString: String) {
-			val buffer = CharBuffer.wrap("$addressString\n")
+			val buffer = charset.encode("$addressString\n")
 
 			subject.parseLine(buffer)
 
@@ -92,7 +95,7 @@ class IPv4LineParserTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["256.2.3.4", "1.256.3.4", "1.2.3.256"])
 		fun `Octet is a non-negative integer not greater then 255`(addressString: String) {
-			val buffer = CharBuffer.wrap("$addressString\n")
+			val buffer = charset.encode("$addressString\n")
 
 			subject.parseLine(buffer)
 
@@ -102,7 +105,7 @@ class IPv4LineParserTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["00.01.02.03", "000.001.002.003", "0000.0001.0002.0003"])
 		fun `Octet may start with one or more zeros`(addressString: String) {
-			val buffer = CharBuffer.wrap("$addressString\n")
+			val buffer = charset.encode("$addressString\n")
 
 			subject.parseLine(buffer)
 
@@ -114,7 +117,7 @@ class IPv4LineParserTest {
 		@ParameterizedTest
 		@ValueSource(strings = [".2.3.4", ".1.2.3.4", "1..3.4", "1.2.3.", "1.2.3.4."])
 		fun `Empty octets are not allowed`(addressString: String) {
-			val buffer = CharBuffer.wrap("$addressString\n")
+			val buffer = charset.encode("$addressString\n")
 
 			subject.parseLine(buffer)
 
@@ -124,7 +127,7 @@ class IPv4LineParserTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["3.14.159.26", "0.0.0.0", "1.2.3.4", "255.255.255.255"])
 		fun `Examples of a well-formed IPv4 address`(addressString: String) {
-			val buffer = CharBuffer.wrap("$addressString\n")
+			val buffer = charset.encode("$addressString\n")
 
 			subject.parseLine(buffer)
 
@@ -141,7 +144,7 @@ class IPv4LineParserTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["\n", "\n1.2.3.4", "\nhere be dragons"])
 		fun `Parser identifies and accepts blank lines`(inputString: String) {
-			val buffer = CharBuffer.wrap(inputString)
+			val buffer = charset.encode(inputString)
 
 			subject.parseLine(buffer)
 
@@ -152,7 +155,7 @@ class IPv4LineParserTest {
 		@ValueSource(booleans = [true, false])
 		fun `Attempt of reading from an exhausted chunk fails to yield any token`(eof: Boolean) {
 			val several = 5
-			val buffer = CharBuffer.allocate(0);
+			val buffer = ByteBuffer.allocate(0);
 
 			val actualResults = List(several) {
 				subject.parseLine(buffer)
@@ -166,15 +169,15 @@ class IPv4LineParserTest {
 		@ParameterizedTest
 		@ValueSource(strings = ["", "1", "1.2.", "1.2.3.4", "1.2.3.4.", "1.2.3.4.5", "999.0.0.0", "some other stuff"])
 		fun `parseLine() consumes a single line regardless of its content`(firstLine: String) {
-			val buffer = CharBuffer.allocate(128)
-				.put(firstLine)
-				.put('\n')
-				.put("No one must look here")
-				.flip()
+			val inputString = listOf(
+				firstLine,
+				"No one must look here".toByteArray()
+			).joinToString("\n")
+			val buffer = charset.encode(inputString)
 
 			subject.parseLine(buffer)
 
-			val expectedPosition = firstLine.length + 1
+			val expectedPosition = inputString.indexOf('\n') + 1
 			assertEquals(expectedPosition, buffer.position())
 		}
 	}

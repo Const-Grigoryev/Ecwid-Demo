@@ -1,7 +1,8 @@
 package dev.aspid812.ipv4_count.impl;
 
 import java.io.IOException;
-import java.nio.CharBuffer;
+import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 import java.util.OptionalLong;
 
 import dev.aspid812.ipv4_count.IPv4Count.FailureException;
@@ -11,7 +12,7 @@ import dev.aspid812.ipv4_count.IPv4Count.ErrorHandler;
 public interface IPv4CountImpl {
 
 	OptionalLong uniqueAddresses();
-	void account(Readable input, ErrorHandler errorHandler) throws IOException;
+	void account(ReadableByteChannel input, ErrorHandler errorHandler) throws IOException;
 
 	static IPv4CountImpl forHealthyState() {
 		return new DefaultIPv4CountImpl();
@@ -25,7 +26,12 @@ public interface IPv4CountImpl {
 
 final class DefaultIPv4CountImpl implements IPv4CountImpl {
 
-	private static final long IPv4_SPACE_SIZE = 1L << IPv4Address.SIZE;
+	static final int DEFAULT_BUFFER_SIZE = 8192;
+
+	static final long IPv4_SPACE_SIZE = 1L << IPv4Address.SIZE;
+
+	private static final byte[] NEWLINE = new byte[] { '\n' };
+	private static final byte[] NOTHING = new byte[0];
 
 	private final BitScale addressSet = new BitScale(IPv4_SPACE_SIZE);
 
@@ -49,15 +55,15 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 	}
 
 	@Override
-	public void account(Readable input, ErrorHandler errorHandler) throws IOException {
+	public void account(ReadableByteChannel input, ErrorHandler errorHandler) throws IOException {
 		var parser = new IPv4LineParser();
-		var buffer = CharBuffer.allocate(8192).limit(0);
+		var buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).limit(0);
 		var eof = false;
 		while (!eof) {
 			if (!buffer.hasRemaining()) {
 				buffer.clear();
 				eof = input.read(buffer) == -1;
-				buffer.put(eof ? "\n" : "").flip();
+				buffer.put(eof ? NEWLINE : NOTHING).flip();
 			}
 
 			parser.parseLine(buffer);
@@ -78,5 +84,5 @@ enum DummyIPv4CountImpl implements IPv4CountImpl {
 	}
 
 	@Override
-	public void account(Readable input, ErrorHandler errorHandler) {}
+	public void account(ReadableByteChannel input, ErrorHandler errorHandler) {}
 }

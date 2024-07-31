@@ -1,8 +1,6 @@
 package dev.aspid812.ipv4_count.impl;
 
-import javax.sound.sampled.Line;
-import java.nio.CharBuffer;
-import java.util.function.IntSupplier;
+import java.nio.ByteBuffer;
 
 import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTETS_PER_ADDRESS;
 import static dev.aspid812.ipv4_count.impl.IPv4Address.BITS_PER_OCTET;
@@ -16,10 +14,6 @@ public final class IPv4LineParser {
 		VALID_ADDRESS,
 		IRRELEVANT_CONTENT,
 		NOTHING
-	}
-
-	private static boolean delimiter(int ch) {
-		return ch == '\n';
 	}
 
 	// Automaton's state summarizes a consumed portion (`p`) of the input string.
@@ -47,13 +41,7 @@ public final class IPv4LineParser {
 		return error;
 	}
 
-	public int parseLine(CharBuffer input) {
-		var dealer = (IntSupplier) () -> input.hasRemaining() ? input.get() : -1;
-		parseLine(dealer);
-		return input.position();
-	}
-
-	void parseLine(IntSupplier input) {
+	public void parseLine(ByteBuffer input) {
 		var restore = state != null;
 
 		// Output registers: construction site of a parsing product.
@@ -66,17 +54,18 @@ public final class IPv4LineParser {
 		var state = restore ? this.state : State.CLOSED_OCTET;
 
 		var eol = false;
-		while (true) {
+		while (input.hasRemaining()) {
 			// **Assertion 1 (loop invariant):** regardless of the state, `0 <= octets && octets < OCTETS_PER_ADDRESS`
 			// both before and after the loop's body.
 
 			// **Assertion 2:** one and only one character is read at each iteration. This is correct because we
 			// do not receive a character from the reader anywhere else.
-			var ch = input.getAsInt();
+			var ch = input.get();
 
 			// **Assertion 3:** the loop breaks when and only when it encounters an EOL or EOF character. Therefore,
 			// a single parser invocation consumes exactly one line from the input.
-			if (ch == -1 || (eol = delimiter(ch)))
+			eol = ch == '\n' || ch == '\r';
+			if (eol)
 				break;
 
 			// **Assertion 4:** by now, we have already guaranteed that `ch` is a regular character, which belongs
