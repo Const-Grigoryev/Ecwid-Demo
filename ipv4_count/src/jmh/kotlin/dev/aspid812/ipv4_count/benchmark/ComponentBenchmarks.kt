@@ -129,10 +129,12 @@ open class BC03_Parser : InternalDatasetFeaturedBenchmark {
 	}
 
 	@Benchmark
-	fun v1_parser(): Int {
+	fun v1_parser(blackhole: Blackhole) {
 		val buffer = checkNotNull(dataKeeper.get())
-		val token = lineParser.parseLine(buffer, IPv4LineClassifier.INSTANCE)
-		return if (token == IPv4LineClassifier.LineToken.VALID_ADDRESS) lineParser.address else 0xBADF00D
+		lineParser.parseLine(buffer)
+		if (lineParser.ready() && lineParser.classify() == IPv4LineParser.LineToken.VALID_ADDRESS) {
+			blackhole.consume(lineParser.address)
+		}
 	}
 }
 

@@ -34,36 +34,36 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 		return OptionalLong.of(addressSet.count());
 	}
 
-	private void account(IPv4LineParser parser, CharBuffer buffer, ErrorHandler errorHandler) throws FailureException {
-		while (true) {
-			var lineToken = parser.parseLine(buffer, IPv4LineClassifier.INSTANCE);
-			if (lineToken == null)
+	private void accountLine(IPv4LineParser parser, ErrorHandler errorHandler) throws FailureException {
+		switch (parser.classify()) {
+			case VALID_ADDRESS:
+				var address = parser.getAddress();
+				addressSet.witness(Integer.toUnsignedLong(address));
 				break;
 
-			switch (lineToken) {
-				case VALID_ADDRESS:
-					var address = parser.getAddress();
-					addressSet.witness(Integer.toUnsignedLong(address));
-					break;
-
-				case IRRELEVANT_CONTENT:
-					errorHandler.onError(parser.getErrorMessage());
-					break;
-			}
+			case IRRELEVANT_CONTENT:
+				var message = parser.getErrorMessage();
+				errorHandler.onError(message);
+				break;
 		}
 	}
 
 	@Override
 	public void account(Readable input, ErrorHandler errorHandler) throws IOException {
 		var parser = new IPv4LineParser();
-		var buffer = CharBuffer.allocate(8192);
+		var buffer = CharBuffer.allocate(8192).limit(0);
 		var eof = false;
 		while (!eof) {
-			buffer.clear();
-			eof = input.read(buffer) == -1;
+			if (!buffer.hasRemaining()) {
+				buffer.clear();
+				eof = input.read(buffer) == -1;
+				buffer.put(eof ? "\n" : "").flip();
+			}
 
-			buffer.put(eof ? "\n" : "").flip();
-			account(parser, buffer, errorHandler);
+			parser.parseLine(buffer);
+			if (parser.ready()) {
+				accountLine(parser, errorHandler);
+			}
 		}
 	}
 }

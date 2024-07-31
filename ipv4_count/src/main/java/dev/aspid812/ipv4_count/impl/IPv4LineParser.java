@@ -1,5 +1,6 @@
 package dev.aspid812.ipv4_count.impl;
 
+import javax.sound.sampled.Line;
 import java.nio.CharBuffer;
 import java.util.function.IntSupplier;
 
@@ -11,10 +12,10 @@ import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTET_MASK;
 //TODO: Fix up comments
 public final class IPv4LineParser {
 
-	public interface Visitor<R> {
-		R address(int address);
-		R mistake(String message);
-		R nothing();
+	public enum LineToken {
+		VALID_ADDRESS,
+		IRRELEVANT_CONTENT,
+		NOTHING
 	}
 
 	private static boolean delimiter(int ch) {
@@ -34,6 +35,10 @@ public final class IPv4LineParser {
 	private int octets;
 	private State state;
 
+	public boolean ready() {
+		return state == null;
+	}
+
 	public int getAddress() {
 		return address;
 	}
@@ -46,12 +51,6 @@ public final class IPv4LineParser {
 		var dealer = (IntSupplier) () -> input.hasRemaining() ? input.get() : -1;
 		parseLine(dealer);
 		return input.position();
-	}
-
-	public <R> R parseLine(CharBuffer input, Visitor<R> visitor) {
-		var pos = parseLine(input);
-//		return pos < input.limit() ? visitLine(visitor) : null;
-		return visitLine(visitor);
 	}
 
 	void parseLine(IntSupplier input) {
@@ -136,15 +135,16 @@ public final class IPv4LineParser {
 		this.state = state;
 	}
 
-	public <R> R visitLine(Visitor<R> visitor) {
-		if (state != null)
-			return null;
-		if (error != null)
-			return visitor.mistake(error);
-		if (octets == OCTETS_PER_ADDRESS)
-			return visitor.address(address);
-		if (octets == 0)
-			return visitor.nothing();
-		throw new IllegalStateException("octets = " + octets);
+	public LineToken classify() {
+		if (state == null) {
+			if (error != null)
+				return LineToken.IRRELEVANT_CONTENT;
+			if (octets == OCTETS_PER_ADDRESS)
+				return LineToken.VALID_ADDRESS;
+			if (octets == 0)
+				return LineToken.NOTHING;
+		}
+
+		throw new IllegalStateException("state = " + state + ",  octets = " + octets);
 	}
 }
