@@ -16,6 +16,7 @@ import dev.aspid812.ipv4_count.benchmark.util.PrepareProcess
 import dev.aspid812.ipv4_gen.IPv4RandomGenerator
 import dev.aspid812.ipv4_gen.IPv4RandomGenerator.Companion.RECOMMENDED_POOL_SIZE
 import dev.aspid812.ipv4_gen.main as IPv4RandomGeneratorApp_main
+import java.nio.channels.Channels
 
 
 @State(Scope.Thread)
@@ -47,7 +48,7 @@ open class BI01_ModesComparison : ExternalDatasetFeaturedBenchmark {
 	}
 
 	@Benchmark
-	fun v1_application() {
+	fun v1_application_stdin() {
 		val process = PrepareProcess.java(IPv4_COUNT_APP)
 			.redirectInput(datasetPath.toFile())
 			.redirectOutput(Redirect.DISCARD)
@@ -56,28 +57,22 @@ open class BI01_ModesComparison : ExternalDatasetFeaturedBenchmark {
 	}
 
 	@Benchmark
-	fun v2_library_file(): Long {
-		datasetPath.inputStream().buffered().use { input ->
-			counter.account(input)
-		}
+	fun v2_application_file() {
+		val process = PrepareProcess.java(IPv4_COUNT_APP, datasetPath.toString())
+			.redirectOutput(Redirect.DISCARD)
+			.start()
+		process.waitFor()
+	}
+
+	@Benchmark
+	fun v3_library_file(): Long {
+		counter.account(datasetPath)
 		return counter.uniqueAddresses().asLong
 	}
 
 	@Benchmark
-	fun v3_library_nio(): Long {
-		FileChannel.open(datasetPath).use { channel ->
-			val stream = ByteBufferInputStream(
-				create = { ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).limit(0) },
-				refill = { it.clear().also(channel::read).flip() }
-			)
-			counter.account(stream)
-			return counter.uniqueAddresses().asLong
-		}
-	}
-
-	@Benchmark
 	fun v4_library_gen(): Long {
-		generator.openInputStream(linesNumber).use { input ->
+		generator.openByteChannel(linesNumber).use { input ->
 			counter.account(input)
 		}
 		return counter.uniqueAddresses().asLong
@@ -100,7 +95,7 @@ open class BI02_Performance : ExternalDatasetFeaturedBenchmark {
 
 	@Benchmark
 	fun v1_measure(): Long {
-		generator.openInputStream(linesNumber).use { input ->
+		generator.openByteChannel(linesNumber).use { input ->
 			counter.account(input)
 		}
 		return counter.uniqueAddresses().asLong

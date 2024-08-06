@@ -2,7 +2,9 @@ package dev.aspid812.ipv4_count.impl;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Path;
 import java.util.OptionalLong;
 
 import dev.aspid812.ipv4_count.IPv4Count.FailureException;
@@ -12,7 +14,14 @@ import dev.aspid812.ipv4_count.IPv4Count.ErrorHandler;
 public interface IPv4CountImpl {
 
 	OptionalLong uniqueAddresses();
+
 	void account(ReadableByteChannel input, ErrorHandler errorHandler) throws IOException;
+
+	default void account(Path inputFile, ErrorHandler errorHandler) throws IOException {
+		try (var input = FileChannel.open(inputFile)) {
+			account(input, errorHandler);
+		}
+	}
 
 	static IPv4CountImpl forHealthyState() {
 		return new DefaultIPv4CountImpl();
@@ -85,4 +94,7 @@ enum DummyIPv4CountImpl implements IPv4CountImpl {
 
 	@Override
 	public void account(ReadableByteChannel input, ErrorHandler errorHandler) {}
+
+	@Override
+	public void account(Path inputFile, ErrorHandler errorHandler) {}
 }

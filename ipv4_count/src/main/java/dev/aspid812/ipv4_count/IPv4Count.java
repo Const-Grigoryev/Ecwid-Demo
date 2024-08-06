@@ -1,13 +1,15 @@
 package dev.aspid812.ipv4_count;
 
-import java.io.InputStream;
 import java.io.IOException;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Path;
+import java.util.Objects;
 import java.util.OptionalLong;
 
 import dev.aspid812.ipv4_count.impl.*;
 
 
-public class IPv4Count {
+public final class IPv4Count {
 
 	public static class FailureException extends IOException {
 		public FailureException(String message) {
@@ -37,8 +39,15 @@ public class IPv4Count {
 		return implementor.uniqueAddresses();
 	}
 
-	public void account(InputStream input) throws IOException {
-		account(Channels.newChannel(input));
+	public void account(Path inputFile) throws IOException {
+		try {
+			implementor.account(inputFile, errorHandler);
+		}
+		catch (Exception ex) {
+			implementor = IPv4CountImpl.forFailedState();
+			if (!(ex instanceof FailureException))
+				throw ex;
+		}
 	}
 
 	public void account(ReadableByteChannel input) throws IOException {

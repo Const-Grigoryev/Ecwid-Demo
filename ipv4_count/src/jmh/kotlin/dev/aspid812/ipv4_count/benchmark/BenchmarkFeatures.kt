@@ -3,7 +3,9 @@ package dev.aspid812.ipv4_count.benchmark
 import java.io.IOException
 import java.io.InputStream
 import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.nio.channels.FileChannel
+import java.nio.channels.ReadableByteChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import kotlin.io.path.*
@@ -22,6 +24,12 @@ fun IPv4RandomGenerator.openInputStream(lineLimit: Long = Long.MAX_VALUE): Input
 		create = { ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).limit(0) },
 		refill = { it.clear().also(sample::draw).flip() }
 	)
+}
+
+
+//TODO: Optimize via cutting `InputStream`
+fun IPv4RandomGenerator.openByteChannel(lineLimit: Long = Long.MAX_VALUE): ReadableByteChannel {
+	return Channels.newChannel(this.openInputStream(lineLimit))
 }
 
 

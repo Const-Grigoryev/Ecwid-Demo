@@ -1,10 +1,10 @@
 package dev.aspid812.ipv4_count.benchmark
 
-import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.LineNumberReader
 import java.nio.ByteBuffer
 import java.nio.IntBuffer
+import java.nio.channels.Channels
 import java.util.concurrent.TimeUnit
 
 import org.openjdk.jmh.annotations.*
@@ -24,14 +24,10 @@ import dev.aspid812.ipv4_count.impl.*
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 open class BC01_Initialization {
 
-	private val errorHandler = BenchmarkFeatures.newThrowingErrorHandler()
-	private val counter = IPv4Count(errorHandler)
-
 	@Benchmark
 	fun v1_init(): Long {
-		InputStream.nullInputStream().use { source ->
-			counter.account(source)
-		}
+		val errorHandler = BenchmarkFeatures.newThrowingErrorHandler()
+		val counter = IPv4Count(errorHandler)
 		return counter.uniqueAddresses().asLong
 	}
 }
