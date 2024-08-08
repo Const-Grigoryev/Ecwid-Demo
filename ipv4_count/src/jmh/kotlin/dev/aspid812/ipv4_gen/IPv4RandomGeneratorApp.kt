@@ -1,19 +1,21 @@
 package dev.aspid812.ipv4_gen
 
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
 import java.io.PrintStream
 
+import dev.aspid812.common.Application
+import dev.aspid812.common.Application.EXIT_FATAL
+import dev.aspid812.common.Application.EXIT_OK
 import dev.aspid812.ipv4_gen.util.Multiplier
 
-
-const val EXIT_OK = 0
-const val EXIT_FATAL = -1
 
 class IPv4RandomGeneratorApp(
 	val poolSize: Int,
 	val sampleSize: Long
-) {
+) : Application {
+
 	companion object {
 		const val POOL_SIZE_DEFAULT = IPv4RandomGenerator.RECOMMENDED_POOL_SIZE
 		const val SAMPLE_SIZE_DEFAULT = Long.MAX_VALUE      // Effectively endless
@@ -39,6 +41,12 @@ class IPv4RandomGeneratorApp(
 	}
 
 	private val engine = IPv4RandomGenerator(poolSize)
+
+	override fun run(input: InputStream?, output: PrintStream?, logger: PrintStream?) =
+		run(
+			output = requireNotNull(output),
+			logger = requireNotNull(logger)
+		)
 
 	fun run(output: OutputStream, logger: PrintStream): Int {
 		try {

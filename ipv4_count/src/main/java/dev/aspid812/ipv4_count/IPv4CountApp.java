@@ -2,18 +2,19 @@ package dev.aspid812.ipv4_count;
 
 import java.io.*;
 import java.nio.channels.Channels;
-import java.nio.file.Path;
+import java.nio.file.*;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Stream;
 
+import dev.aspid812.common.Application;
 import dev.aspid812.ipv4_count.IPv4Count.ErrorHandler;
 
 
-public class IPv4CountApp {
+public class IPv4CountApp implements Application {
 
-	public static final int EXIT_OK = 0;
-	public static final int EXIT_FATAL = -1;
+	public static final int EXIT_STARTUP = -2;
 
 	enum ErrorHandlers {;
 		public static ErrorHandler reportAndProceed(PrintStream logger) {
@@ -23,9 +24,27 @@ public class IPv4CountApp {
 		}
 	}
 
-	//TODO: Validate arguments, do more careful error handling
-	public static IPv4CountApp forCommandLine(String[] args) {
-		var inputFiles = Arrays.stream(args).map(Path::of).toList();
+	public static Application forCommandLine(String... arguments) {
+		var inputFiles = Arrays.stream(arguments)
+			.flatMap(arg -> {
+				try {
+					var file = Path.of(arg);
+					return Stream.of(file);
+				}
+				catch (InvalidPathException ex) {
+					return Stream.empty();
+				}
+			})
+			.filter(Files::isReadable)
+			.toList();
+
+		if (inputFiles.size() < arguments.length) {
+			return Application.echo(EXIT_STARTUP, """
+				Error: an argument cannot be interpreted as a valid file name, \
+				or such file does not exist, or it has a read restriction."""
+			);
+		}
+
 		var includeStandardInput = inputFiles.isEmpty();
 		return new IPv4CountApp(inputFiles, includeStandardInput);
 	}
@@ -38,6 +57,7 @@ public class IPv4CountApp {
 		this.includeStandardInput = includeStandardInput;
 	}
 
+	@Override
 	public int run(InputStream input, PrintStream output, PrintStream logger) {
 		var errorHandler = ErrorHandlers.reportAndProceed(logger);
 		var counter = new IPv4Count(errorHandler);
