@@ -2,35 +2,15 @@ package dev.aspid812.ipv4_count.benchmark
 
 import java.io.IOException
 import java.io.InputStream
-import java.nio.ByteBuffer
-import java.nio.channels.Channels
 import java.nio.channels.FileChannel
-import java.nio.channels.ReadableByteChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import kotlin.io.path.*
 
 import dev.aspid812.ipv4_count.IPv4Count
-import dev.aspid812.ipv4_count.benchmark.util.ByteBufferInputStream
-import dev.aspid812.ipv4_gen.IPv4RandomGenerator
 import dev.aspid812.ipv4_gen.Sample
 import dev.aspid812.ipv4_gen.draw
 import dev.aspid812.ipv4_gen.util.Multiplier
-
-
-fun IPv4RandomGenerator.openInputStream(lineLimit: Long = Long.MAX_VALUE): InputStream {
-	val sample = this.sample(lineLimit)
-	return ByteBufferInputStream(
-		create = { ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).limit(0) },
-		refill = { it.clear().also(sample::draw).flip() }
-	)
-}
-
-
-//TODO: Optimize via cutting `InputStream`
-fun IPv4RandomGenerator.openByteChannel(lineLimit: Long = Long.MAX_VALUE): ReadableByteChannel {
-	return Channels.newChannel(this.openInputStream(lineLimit))
-}
 
 
 object BenchmarkFeatures {
@@ -42,10 +22,6 @@ object BenchmarkFeatures {
 
 
 interface InternalDatasetFeaturedBenchmark {
-
-	companion object {
-		const val NEWLINE = '\n'.code
-	}
 
 	val dataset: String
 

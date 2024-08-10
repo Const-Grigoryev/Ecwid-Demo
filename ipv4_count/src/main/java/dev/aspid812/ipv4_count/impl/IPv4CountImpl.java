@@ -6,6 +6,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Path;
 import java.util.OptionalLong;
+import java.util.function.Supplier;
 
 import dev.aspid812.ipv4_count.IPv4Count.FailureException;
 import dev.aspid812.ipv4_count.IPv4Count.ErrorHandler;
@@ -35,12 +36,14 @@ public interface IPv4CountImpl {
 
 final class DefaultIPv4CountImpl implements IPv4CountImpl {
 
-	static final int DEFAULT_BUFFER_SIZE = 8192;
+	static final int DEFAULT_BUFFER_SIZE = 1 << 20;     // 1 MB, seems to be optimal
 
 	static final long IPv4_SPACE_SIZE = 1L << IPv4Address.SIZE;
 
 	private static final byte[] NEWLINE = new byte[] { '\n' };
-	private static final byte[] NOTHING = new byte[0];
+	private static final byte[] NOTHING = new byte[] {};
+
+	final Supplier<ByteBuffer> newByteBuffer = () -> ByteBuffer.allocateDirect(DEFAULT_BUFFER_SIZE);
 
 	private final BitScale addressSet = new BitScale(IPv4_SPACE_SIZE);
 
@@ -66,7 +69,7 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 	@Override
 	public void account(ReadableByteChannel input, ErrorHandler errorHandler) throws IOException {
 		var parser = new IPv4LineParser();
-		var buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).limit(0);
+		var buffer = newByteBuffer.get().limit(0);
 		var eof = false;
 		while (!eof) {
 			if (!buffer.hasRemaining()) {
