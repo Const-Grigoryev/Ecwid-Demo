@@ -2,12 +2,10 @@ package dev.aspid812.ipv4_count.impl;
 
 import java.nio.ByteBuffer;
 
-import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTETS_PER_ADDRESS;
 import static dev.aspid812.ipv4_count.impl.IPv4Address.BITS_PER_OCTET;
 import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTET_MASK;
 
 
-//TODO: Fix up comments
 public final class IPv4LineParser {
 
 	public enum LineToken {
@@ -16,21 +14,97 @@ public final class IPv4LineParser {
 		NOTHING
 	}
 
-	// Automaton's state summarizes a consumed portion (`p`) of the input string.
-	private enum State {
-		OPEN_OCTET,     // `p` contains some octets, and the last one isn't complete yet; thus, `p` ends with a digit;
-		CLOSED_OCTET,   // `p` is empty, or contains some octets, each of which is _closed_ by a following dot;
-		NONSENSE        // `p` may not be a prefix of any recognizable substance (valid IP address).
+	// Automaton's state summarizes a consumed portion (`p`) of the input string. We store it as a plain `int`,
+	// whose parts have the following meaning: (1)-(4).
+
+	// (1) When `p` contains some octets, and the last one isn't complete yet (i.e., `p` ends with a digit),
+	// then the lowest bit of the state (_open octet flag_) is set to 1. If `p` is empty, or contains some octets,
+	// each of which is closed by a following dot, then that bit is 0.
+	private static final int ST_OPEN_OCTET_FLAG = 0x0000_0001;
+
+	// (2) The next two bits count the number of closed octets within `p`. It may only be 0, 1, 2 or 3, because
+	// the fourth octet is never followed by a closing dot.
+	private static final int ST_OCTET_COUNT_MASK = 0x0000_0006;
+
+	// (3) Next pack of bits is reserved to indicate various errors. In a normal situation, they all are zeros.
+	private static final int ST_ERROR_MASK = 0x7FFF_FFF8;
+
+	// (4) The highest bit is set when the parser encounters an EOL character. It marks the current state as _final_
+	// and breaks a parsing loop. Since this flag is the highest bit of a signed integer, one can be easily check it
+	// by comparing to zero: the state is final if and only if `state < 0`.
+	private static final int ST_FINAL_FLAG = 0x8000_0000;
+
+	private static final int ST_INIT = 0;
+	private static final int ST_CLOSED_OCTET = ST_INIT;
+	private static final int ST_OPEN_OCTET = ST_INIT | ST_OPEN_OCTET_FLAG;
+
+	private static final int ST_ERR_UNEXPECTED_CHARACTER = 0x08;
+	private static final int ST_ERR_INVALID_OCTET = 0x09;
+	private static final int ST_FIN_EMPTY_LINE = ST_FINAL_FLAG;
+	private static final int ST_FIN_ADDRESS = ST_OCTET_COUNT_MASK | ST_OPEN_OCTET_FLAG | ST_FINAL_FLAG;
+
+	private int state = ST_INIT;
+	private int address = 0x00;
+
+	public boolean parseLine(ByteBuffer input) {
+		// If the given state is not final, unpack it to local variables. Otherwise, reset to initial state.
+		var restore = state >= 0;
+		var state = restore ? this.state : ST_INIT;
+		var address = restore ? this.address : 0x00;
+
+		// Loop over characters of the input string, changing `state` after each; stop when the automaton reaches
+		// a final state (or, naturally, when no character left in the input).
+		while (input.hasRemaining() && state >= 0) {
+			var ch = input.get();
+
+			// Compute transition function: given a character of the alphabet, map current state to a new one. After
+			// that, the character is considered consumed and adopted. Please note that the order of case labels
+			// is important here, since we essentially rely on falling-through.
+			state = switch (state & ~ST_OCTET_COUNT_MASK) {
+				case ST_OPEN_OCTET:
+					if (ch == '.') {
+						address <<= BITS_PER_OCTET;
+						yield state + ST_OPEN_OCTET_FLAG;   // Remove open octet flag, increase octet counter
+					}
+
+				case ST_CLOSED_OCTET:
+					if ('0' <= ch && ch <= '9') {
+						var octet = address & OCTET_MASK;
+						address ^= (octet ^= octet * 10 + (ch - '0'));
+						yield (octet & ~OCTET_MASK) != 0
+							? ST_ERR_INVALID_OCTET
+							: state | ST_OPEN_OCTET_FLAG;   // Set open octet flag, keep octet counter untouched
+					}
+
+				default:
+					if (ch == '\n' || ch == '\r')
+						yield state | ST_FINAL_FLAG;
+
+					// If we've fallen-through down to here, it means the automaton was failed to recognize the input.
+					yield (state & ST_ERROR_MASK) == 0
+						? ST_ERR_UNEXPECTED_CHARACTER
+						: state;                            // Fast-forward to very end of the line
+			};
+		}
+
+		// Store the reached state for a future use.
+		this.state = state;
+		this.address = address;
+
+		// Return `true` if the state is final. This means that another line of the input is parsed completely,
+		// and a user may inspect the result with `classify()` and other methods.
+		return state < 0;
 	}
 
-	private int address;
-	private String error;
+	public LineToken classify() {
+		if (state >= 0)
+			return null;
 
-	private int octets;
-	private State state;
-
-	public boolean ready() {
-		return state == null;
+		return switch (state) {
+			case ST_FIN_ADDRESS    -> LineToken.VALID_ADDRESS;
+			case ST_FIN_EMPTY_LINE -> LineToken.NOTHING;
+			default                -> LineToken.IRRELEVANT_CONTENT;
+		};
 	}
 
 	public int getAddress() {
@@ -38,102 +112,15 @@ public final class IPv4LineParser {
 	}
 
 	public String getErrorMessage() {
-		return error;
-	}
+		if ((state & ~ST_FINAL_FLAG) == ST_ERR_UNEXPECTED_CHARACTER)
+			return "Unexpected character";
 
-	public void parseLine(ByteBuffer input) {
-		var restore = state != null;
+		if ((state & ~ST_FINAL_FLAG) == ST_ERR_INVALID_OCTET)
+			return "Invalid octet value";
 
-		// Output registers: construction site of a parsing product.
-		var address = restore ? this.address : 0x00;
-		var error = restore ? this.error : null;
+		if (ST_FIN_EMPTY_LINE < state && state < ST_FIN_ADDRESS)
+			return "Malformed address (too short)";
 
-		// Loop over characters of the input string (single line), changing `state` after each. The variable named
-		// `octets` counts closed octets and, strictly speaking, this number is a part of automaton's state too.
-		var octets = restore ? this.octets : 0;
-		var state = restore ? this.state : State.CLOSED_OCTET;
-
-		var eol = false;
-		while (input.hasRemaining()) {
-			// **Assertion 1 (loop invariant):** regardless of the state, `0 <= octets && octets < OCTETS_PER_ADDRESS`
-			// both before and after the loop's body.
-
-			// **Assertion 2:** one and only one character is read at each iteration. This is correct because we
-			// do not receive a character from the reader anywhere else.
-			var ch = input.get();
-
-			// **Assertion 3:** the loop breaks when and only when it encounters an EOL or EOF character. Therefore,
-			// a single parser invocation consumes exactly one line from the input.
-			eol = ch == '\n' || ch == '\r';
-			if (eol)
-				break;
-
-			// **Assertion 4:** by now, we have already guaranteed that `ch` is a regular character, which belongs
-			// to the automaton's alphabet, not a special character like EOL or EOF.
-
-			// Compute transition function: given a character of the alphabet, map current state to a new one. After
-			// that, the character is considered consumed and adopted. Please note that the order of case labels
-			// is important here, since we essentially rely on falling-through.
-			state = switch (state) {
-				case OPEN_OCTET:
-					if (ch == '.' && ++octets < OCTETS_PER_ADDRESS) {
-						address <<= BITS_PER_OCTET;
-						yield State.CLOSED_OCTET;
-					}
-
-				case CLOSED_OCTET:
-					if ('0' <= ch && ch <= '9') {
-						var octet = address & OCTET_MASK;
-						address ^= (octet ^= octet * 10 + (ch - '0'));
-						if ((octet & ~OCTET_MASK) != 0) {
-							error = "Invalid octet value";
-							yield State.NONSENSE;
-						}
-						yield State.OPEN_OCTET;
-					}
-
-				default:
-					// If we've fallen-through down to here, it means the automaton was failed to recognize the input.
-					error = "Unexpected character";
-
-				case NONSENSE:
-					yield State.NONSENSE;
-			};
-		}
-
-		// Compute classifying function: is the state our automaton has reached accepting or non-accepting?
-		// It can be thought of as a peculiar special case of a transition function for the EOL character. Thus,
-		// fall-through matters here as before (watch you step!). Finally, depending on the classification result,
-		// send a parsing product to a corresponding visitor/builder function.
-		if (eol) {
-			var accepting = switch (state) {
-				case OPEN_OCTET   -> ++octets == OCTETS_PER_ADDRESS;  // Valid address
-				case CLOSED_OCTET -> octets == 0;                     // Empty line
-				case NONSENSE     -> error != null;                   // Bad line, but it's OK to "accept" it whenever the error is already checked
-			};
-			if (!accepting) {
-				error = "Malformed address (too short)";
-			}
-			state = null;
-		}
-
-		// Store the final state for a future use
-		this.address = address;
-		this.error = error;
-		this.octets = octets;
-		this.state = state;
-	}
-
-	public LineToken classify() {
-		if (state == null) {
-			if (error != null)
-				return LineToken.IRRELEVANT_CONTENT;
-			if (octets == OCTETS_PER_ADDRESS)
-				return LineToken.VALID_ADDRESS;
-			if (octets == 0)
-				return LineToken.NOTHING;
-		}
-
-		throw new IllegalStateException("state = " + state + ",  octets = " + octets);
+		return null;
 	}
 }

@@ -53,7 +53,11 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 	}
 
 	private void accountLine(IPv4LineParser parser, ErrorHandler errorHandler) throws FailureException {
-		switch (parser.classify()) {
+		var lineToken = parser.classify();
+		if (lineToken == null)
+			throw new IllegalStateException("Parser is not ready");
+
+		switch (lineToken) {
 			case VALID_ADDRESS:
 				var address = parser.getAddress();
 				addressSet.witness(Integer.toUnsignedLong(address));
@@ -78,8 +82,8 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 				buffer.put(eof ? NEWLINE : NOTHING).flip();
 			}
 
-			parser.parseLine(buffer);
-			if (parser.ready()) {
+			var ready = parser.parseLine(buffer);
+			if (ready) {
 				accountLine(parser, errorHandler);
 			}
 		}

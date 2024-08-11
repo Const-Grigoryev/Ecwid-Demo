@@ -12,37 +12,6 @@ import dev.aspid812.ipv4_count.impl.IPv4LineParser.LineToken
 
 class IPv4LineParserTest {
 
-	sealed interface IPv4Line {
-		data class Address(val address: Int) : IPv4Line
-		data object Mistake: IPv4Line
-		data object Nothing: IPv4Line
-	}
-
-	private fun IPv4LineParser.toIPv4Line() =
-		when (this.classify()!!) {
-			LineToken.VALID_ADDRESS -> IPv4Line.Address(this.address)
-			LineToken.IRRELEVANT_CONTENT -> IPv4Line.Mistake
-			LineToken.NOTHING -> IPv4Line.Nothing
-		}
-
-	companion object {
-		private val samples = listOf(
-			""                to IPv4Line.Nothing,
-			"1"               to IPv4Line.Mistake,     // Meaningful string, but not an address
-			"1.2."            to IPv4Line.Mistake,     // Sudden line brake
-			"1.2..4"          to IPv4Line.Mistake,     // Empty octet place
-			"1.2.3.4."        to IPv4Line.Mistake,     // Period closes the last octet
-			"1.2.3.4.5"       to IPv4Line.Mistake,     // Too many octets
-			"999.0.0.0"       to IPv4Line.Mistake,     // Illegal value of an octet
-			"Kilroy was here" to IPv4Line.Mistake,     // Not an IP address at all
-			"1.2.3.4"         to IPv4Line.Address(0x01020304),
-			"1.02.003.0004"   to IPv4Line.Address(0x01020304),
-		)
-
-		@JvmStatic  // Still waiting for a more general solution...
-		fun inputLines() = samples.map { Arguments.of(it.first + "\n", it.second) }
-	}
-
 	val charset: Charset = Charsets.UTF_8
 
 	lateinit var subject: IPv4LineParser
@@ -56,23 +25,25 @@ class IPv4LineParserTest {
 	@DisplayName("API features")
 	inner class ApiFeatures {
 
-		@Test
-		//TODO: More test examples
-		fun `Input string may be read by pieces`() {
-			val stringPieces = "3.14.\t159.26".split("\t")
+		@ParameterizedTest
+		@ValueSource(strings = ["3.14.15\\\\9.26", "\\1.2\\.\\3.4\\", "127.\\0\\0\\0\\.000.001"])
+		fun `Input string may be read by pieces`(inputString: String) {
+			val stringPieces = inputString.split("\\").plusElement("\n")
 
-			val actualResults = listOf(
-				with(subject) { parseLine(charset.encode(stringPieces[0])); ready() },
-				with(subject) { parseLine(charset.encode(stringPieces[1])); ready() },
-				with(subject) { parseLine(charset.encode("\n")); ready() },
-			)
-			val expectedResults = listOf(false, false, true)
+			val actualResults = sequence {
+				for (piece in stringPieces) {
+					val ready = subject.parseLine(charset.encode(piece))
+					yield(ready)
+				}
+			}
+			.toList()
+
+			val expectedResults = List(stringPieces.size) { it == stringPieces.lastIndex }
 			assertEquals(expectedResults, actualResults)
 
-			val expectedValue = stringPieces.joinToString("")
+			val expectedValue = inputString.replace("\\", "")
 				.let(IPv4Address::parseInt)
-				.let(IPv4Line::Address)
-			assertEquals(expectedValue, subject.toIPv4Line())
+			assertEquals(expectedValue, subject.address)
 		}
 	}
 
@@ -159,7 +130,6 @@ class IPv4LineParserTest {
 
 			val actualResults = List(several) {
 				subject.parseLine(buffer)
-				subject.ready()
 			}
 
 			val expectedResults = List(several) { false }
