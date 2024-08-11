@@ -2,7 +2,7 @@ package dev.aspid812.ipv4_count.impl;
 
 
 // The API below was partly inspired by `java.lang.Integer`
-public final class IPv4Address {
+public enum IPv4Address {;
 
 	public static final int OCTETS_PER_ADDRESS = 4;
 	public static final int BITS_PER_OCTET = 8;
@@ -10,7 +10,7 @@ public final class IPv4Address {
 
 	public static final int SIZE = BITS_PER_OCTET * OCTETS_PER_ADDRESS;
 
-	// The next tho methods are purposed for debug and testing only. They are intentionally kept simple
+	// The next two methods are purposed for debug and testing only. They are intentionally kept simple
 	// by the cost of optimization and proper error handling.
 	public static int parseInt(String str) {
 		var octets = str.split("\\.", OCTETS_PER_ADDRESS);
@@ -29,6 +29,4 @@ public final class IPv4Address {
 			Integer.toString(OCTET_MASK & (value))
 		);
 	}
-
-	private IPv4Address() {}
 }

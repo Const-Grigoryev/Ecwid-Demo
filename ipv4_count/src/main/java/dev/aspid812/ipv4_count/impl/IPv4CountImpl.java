@@ -24,11 +24,11 @@ public interface IPv4CountImpl {
 		}
 	}
 
-	static IPv4CountImpl forHealthyState() {
+	static IPv4CountImpl forOnline() {
 		return new DefaultIPv4CountImpl();
 	}
 
-	static IPv4CountImpl forFailedState() {
+	static IPv4CountImpl forOffline() {
 		return DummyIPv4CountImpl.INSTANCE;
 	}
 }

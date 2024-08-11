@@ -22,17 +22,17 @@ public final class IPv4Count {
 
 		// Inheritors may throw this instance of the exception from within `onError` method to signal about a user's
 		// decision to terminate the counting process entirely.
-		FailureException FAILURE = new FailureException("Aborted due to invalid input data");
+		FailureException ABORT = new FailureException("Aborted due to invalid input data");
 
 		void onError(String error) throws FailureException;
 	}
 
 	final ErrorHandler errorHandler;
 
-	private IPv4CountImpl implementor = IPv4CountImpl.forHealthyState();
+	private IPv4CountImpl implementor = IPv4CountImpl.forOnline();
 
 	public IPv4Count(ErrorHandler errorHandler) {
-		this.errorHandler = errorHandler;
+		this.errorHandler = Objects.requireNonNull(errorHandler);
 	}
 
 	public OptionalLong uniqueAddresses() {
@@ -44,7 +44,7 @@ public final class IPv4Count {
 			implementor.account(inputFile, errorHandler);
 		}
 		catch (Exception ex) {
-			implementor = IPv4CountImpl.forFailedState();
+			implementor = IPv4CountImpl.forOffline();
 			if (!(ex instanceof FailureException))
 				throw ex;
 		}
@@ -55,7 +55,7 @@ public final class IPv4Count {
 			implementor.account(input, errorHandler);
 		}
 		catch (Exception ex) {
-			implementor = IPv4CountImpl.forFailedState();
+			implementor = IPv4CountImpl.forOffline();
 			if (!(ex instanceof FailureException))
 				throw ex;
 		}

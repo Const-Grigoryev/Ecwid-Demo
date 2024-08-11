@@ -30,13 +30,10 @@ class IPv4LineParserTest {
 		fun `Input string may be read by pieces`(inputString: String) {
 			val stringPieces = inputString.split("\\").plusElement("\n")
 
-			val actualResults = sequence {
-				for (piece in stringPieces) {
-					val ready = subject.parseLine(charset.encode(piece))
-					yield(ready)
-				}
+			val actualResults = List(stringPieces.size) { i ->
+				val piece = stringPieces[i]
+				subject.parseLine(charset.encode(piece))
 			}
-			.toList()
 
 			val expectedResults = List(stringPieces.size) { it == stringPieces.lastIndex }
 			assertEquals(expectedResults, actualResults)
@@ -122,9 +119,8 @@ class IPv4LineParserTest {
 			assertEquals(LineToken.NOTHING, subject.classify())
 		}
 
-		@ParameterizedTest(name = "eof = {0}")
-		@ValueSource(booleans = [true, false])
-		fun `Attempt of reading from an exhausted chunk fails to yield any token`(eof: Boolean) {
+		@Test
+		fun `Attempt of reading from an exhausted chunk do not yield any token`() {
 			val several = 5
 			val buffer = ByteBuffer.allocate(0);
 
