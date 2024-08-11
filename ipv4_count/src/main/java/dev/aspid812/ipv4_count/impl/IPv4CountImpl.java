@@ -58,12 +58,12 @@ final class DefaultIPv4CountImpl implements IPv4CountImpl {
 			throw new IllegalStateException("Parser is not ready");
 
 		switch (lineToken) {
-			case VALID_ADDRESS:
+			case ADDRESS:
 				var address = parser.getAddress();
 				addressSet.witness(Integer.toUnsignedLong(address));
 				break;
 
-			case IRRELEVANT_CONTENT:
+			case NONSENSE:
 				var message = parser.getErrorMessage();
 				errorHandler.onError(message);
 				break;

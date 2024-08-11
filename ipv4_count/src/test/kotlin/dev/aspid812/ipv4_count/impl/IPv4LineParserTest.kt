@@ -57,7 +57,7 @@ class IPv4LineParserTest {
 
 			subject.parseLine(buffer)
 
-			assertEquals(LineToken.IRRELEVANT_CONTENT, subject.classify())
+			assertEquals(LineToken.NONSENSE, subject.classify())
 		}
 
 		@ParameterizedTest
@@ -67,7 +67,7 @@ class IPv4LineParserTest {
 
 			subject.parseLine(buffer)
 
-			assertEquals(LineToken.IRRELEVANT_CONTENT, subject.classify())
+			assertEquals(LineToken.NONSENSE, subject.classify())
 		}
 
 		@ParameterizedTest
@@ -78,7 +78,7 @@ class IPv4LineParserTest {
 			subject.parseLine(buffer)
 
 			val expectedAddress = IPv4Address.parseInt(addressString)
-			assertEquals(LineToken.VALID_ADDRESS, subject.classify())
+			assertEquals(LineToken.ADDRESS, subject.classify())
 			assertEquals(expectedAddress, subject.address)
 		}
 
@@ -89,7 +89,7 @@ class IPv4LineParserTest {
 
 			subject.parseLine(buffer)
 
-			assertEquals(LineToken.IRRELEVANT_CONTENT, subject.classify())
+			assertEquals(LineToken.NONSENSE, subject.classify())
 		}
 
 		@ParameterizedTest
@@ -100,7 +100,7 @@ class IPv4LineParserTest {
 			subject.parseLine(buffer)
 
 			val expectedAddress = IPv4Address.parseInt(addressString)
-			assertEquals(LineToken.VALID_ADDRESS, subject.classify())
+			assertEquals(LineToken.ADDRESS, subject.classify())
 			assertEquals(expectedAddress, subject.address)
 		}
 	}
@@ -116,7 +116,7 @@ class IPv4LineParserTest {
 
 			subject.parseLine(buffer)
 
-			assertEquals(LineToken.NOTHING, subject.classify())
+			assertEquals(LineToken.EMPTY_LINE, subject.classify())
 		}
 
 		@Test

@@ -9,9 +9,9 @@ import static dev.aspid812.ipv4_count.impl.IPv4Address.OCTET_MASK;
 public final class IPv4LineParser {
 
 	public enum LineToken {
-		VALID_ADDRESS,
-		IRRELEVANT_CONTENT,
-		NOTHING
+		ADDRESS,
+		NONSENSE,
+		EMPTY_LINE
 	}
 
 	// Automaton's state summarizes a consumed portion (`p`) of the input string. We store it as a plain `int`,
@@ -101,9 +101,9 @@ public final class IPv4LineParser {
 			return null;
 
 		return switch (state) {
-			case ST_FIN_ADDRESS    -> LineToken.VALID_ADDRESS;
-			case ST_FIN_EMPTY_LINE -> LineToken.NOTHING;
-			default                -> LineToken.IRRELEVANT_CONTENT;
+			case ST_FIN_ADDRESS    -> LineToken.ADDRESS;
+			case ST_FIN_EMPTY_LINE -> LineToken.EMPTY_LINE;
+			default                -> LineToken.NONSENSE;
 		};
 	}
 
